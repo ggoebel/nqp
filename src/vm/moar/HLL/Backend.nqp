@@ -10,8 +10,10 @@ my sub literal_subst(str $source, str $pattern, $replacement) {
     $result;
 }
 
-
 class HLL::Backend::MoarVM {
+    our $StringHeap;
+    our $Callsites;
+
     our %moar_config := nqp::backendconfig();
     
     my sub read_ui32($fh, $buf?) {
@@ -124,11 +126,14 @@ class HLL::Backend::MoarVM {
     my $prof_end_sub;
     method ensure_prof_routines() {
         unless $prof_start_sub {
+            my %*COMPILING;
+            self.start('');
             $prof_start_sub := self.compunit_mainline(self.mbc(self.mast(QAST::CompUnit.new(
                 QAST::Block.new(
                     QAST::Op.new( :op('mvmstartprofile'),
                         QAST::Var.new( :name('config'), :scope('local'), :decl('param') ) )
                 )))));
+            self.start('');
             $prof_end_sub := self.compunit_mainline(self.mbc(self.mast(QAST::CompUnit.new(
                 QAST::Block.new(
                     QAST::Op.new( :op('mvmendprofile') )
@@ -137,11 +142,11 @@ class HLL::Backend::MoarVM {
     }
     method run_profiled($what, $filename, $kind) {
         unless $kind {
-            if $filename ~~ / '.html' | '.json' | '.sql' $ / {
+            if $filename ~~ / \. [ 'html' | 'json' | 'sql' ] $ / {
                 $kind := 'instrumented';
-	    } elsif $filename ~~ / '.mvmheap' $ / {
+            } elsif $filename ~~ / '.mvmheap' $ / {
                 $kind := 'heap';
-	    } else {
+            } else {
                 $kind := 'instrumented';
             }
         }
@@ -162,7 +167,7 @@ class HLL::Backend::MoarVM {
             $conf-hash := nqp::hash('kind', $kind);
         }
 
-        my @END := nqp::gethllsym('perl6', '@END_PHASERS');
+        my @END := nqp::gethllsym('Raku', '@END_PHASERS');
         @END.push(-> { self.dump_profile_data($prof_end_sub(), $kind, $filename) })
             if nqp::defined(@END);
 
@@ -465,7 +470,7 @@ class HLL::Backend::MoarVM {
                 my $v := $mapping{$k};
                 if nqp::ishash($v) {
                     if !$is-first {
-                        nqp::push_s($pieces, ",\n('");
+                        nqp::push_s($pieces, ", ('");
                     }
                     else { $is-first := 0 }
                     nqp::push_s($pieces,
@@ -492,7 +497,7 @@ class HLL::Backend::MoarVM {
                 my $v := $mapping{$k};
                 if !nqp::ishash($v) {
                     if !$is-first {
-                        nqp::push_s($pieces, ",\n('");
+                        nqp::push_s($pieces, ", ('");
                     }
                     else { $is-first := 0 }
                     my $type-info := %type-info{nqp::iterkey_s($k)};
@@ -542,11 +547,11 @@ class HLL::Backend::MoarVM {
 
                         for $v -> $gc {
                             if !$is-first {
-                                nqp::push_s($pieces, ",\n(");
+                                nqp::push_s($pieces, ", (");
                             }
                             else { $is-first := 0 }
                             my @g := nqp::list_s();
-                            for <time retained_bytes promoted_bytes gen2_roots full responsible cleared_bytes start_time sequence> -> $f {
+                            for <time retained_bytes promoted_bytes gen2_roots stolen_gen2_roots full responsible cleared_bytes start_time sequence> -> $f {
                                 nqp::push_s(@g, ~($gc{$f} // '0'));
                             }
                             nqp::push_s(@g, $thread_id);
@@ -571,7 +576,7 @@ class HLL::Backend::MoarVM {
 
                                     for $deallocs -> $entry {
                                         if !$is-first {
-                                            nqp::push_s($pieces, ",\n(");
+                                            nqp::push_s($pieces, ", (");
                                         }
                                         else { $is-first := 0 }
                                         @g := nqp::list_s($gc<sequence>, $thread_id);
@@ -598,8 +603,6 @@ class HLL::Backend::MoarVM {
                         my $allocation_pieces := nqp::list_s;
                         nqp::push_s($allocation_pieces, 'INSERT INTO allocations VALUES (');
 
-                        nqp::push_s($pieces, 'INSERT INTO calls VALUES ');
-
                         sub collect_calls(str $parent_id, %call_graph) {
                             my str $call_id := ~$node_id;
                             $node_id++;
@@ -609,9 +612,10 @@ class HLL::Backend::MoarVM {
                             }
                             if $is_first {
                                 $is_first := 0;
+                                nqp::push_s($pieces, 'INSERT INTO calls VALUES ');
                             }
                             else {
-                                nqp::push_s($pieces, "),\n");
+                                nqp::push_s($pieces, "), ");
                             }
                             my str $routine_id := ~%call_graph<id>;
                             %call_rec_depth{$routine_id} := 0 unless %call_rec_depth{$routine_id};
@@ -626,7 +630,7 @@ class HLL::Backend::MoarVM {
                                         nqp::push_s(@a, ~($a{$f} // '0'));
                                     }
                                     if nqp::elems($allocation_pieces) > 1 {
-                                        nqp::push_s($allocation_pieces, ",\n(");
+                                        nqp::push_s($allocation_pieces, ", (");
                                     }
                                     nqp::push_s($allocation_pieces, nqp::join(',', @a) ~ ")");
                                 }
@@ -641,10 +645,14 @@ class HLL::Backend::MoarVM {
                             if nqp::elems($pieces) > 500 {
                                 $profile_fh.print(nqp::join("", $pieces));
                                 nqp::splice($pieces, $empty-array, 0, nqp::elems($pieces));
+                                nqp::push_s($pieces, ");\n");
+                                $is_first := 1;
                             }
                         }
                         collect_calls(~$node_id, $v);
-                        nqp::push_s($pieces, ");\n");
+                        if $is_first == 0 { # there are actual records we have to close
+                            nqp::push_s($pieces, ");\n");
+                        }
                         if nqp::elems($allocation_pieces) > 1 {
                             nqp::push_s($pieces, nqp::join('', $allocation_pieces) ~ ";\n");
                         }
@@ -691,7 +699,7 @@ class HLL::Backend::MoarVM {
         my str $template;
 
         if !$want_json && !$want_sql {
-            my $temppath := nqp::backendconfig()<prefix> ~ '/share/nqp/lib/profiler/template.html';
+            my $temppath := nqp::gethllsym('default', 'SysConfig').nqp-home() ~ '/lib/profiler/template.html';
             $template := try slurp('src/vm/moar/profiler/template.html');
             unless $template {
                 $template := try slurp($temppath);
@@ -717,7 +725,7 @@ class HLL::Backend::MoarVM {
             $profile_fh.say('BEGIN;');
             $profile_fh.say('CREATE TABLE types(id INTEGER PRIMARY KEY ASC, name TEXT, extra_info JSON, type_links JSON);');
             $profile_fh.say('CREATE TABLE routines(id INTEGER PRIMARY KEY ASC, name TEXT, line INT, file TEXT);');
-            $profile_fh.say('CREATE TABLE gcs(time INT, retained_bytes INT, promoted_bytes INT, gen2_roots INT, full INT, responsible INT, cleared_bytes INT, start_time INT, sequence_num INT, thread_id INT, PRIMARY KEY(sequence_num, thread_id));');
+            $profile_fh.say('CREATE TABLE gcs(time INT, retained_bytes INT, promoted_bytes INT, gen2_roots INT, stolen_gen2_roots INT, full INT, responsible INT, cleared_bytes INT, start_time INT, sequence_num INT, thread_id INT, PRIMARY KEY(sequence_num, thread_id));');
             $profile_fh.say('CREATE TABLE calls(id INTEGER PRIMARY KEY ASC, parent_id INT, routine_id INT, osr INT, spesh_entries INT, jit_entries INT, inlined_entries INT, inclusive_time INT, exclusive_time INT, entries INT, deopt_one INT, deopt_all INT, rec_depth INT, first_entry_time INT, highest_child_id INT, FOREIGN KEY(routine_id) REFERENCES routines(id));');
             $profile_fh.say('CREATE TABLE profile(total_time INT, spesh_time INT, thread_id INT, parent_thread_id INT, root_node INT, first_entry_time INT, FOREIGN KEY(root_node) REFERENCES calls(id));');
             $profile_fh.say('CREATE TABLE allocations(call_id INT, type_id INT, spesh INT, jit INT, count INT, replaced INT, PRIMARY KEY(call_id, type_id), FOREIGN KEY(call_id) REFERENCES calls(id), FOREIGN KEY(type_id) REFERENCES types(id));');
@@ -763,8 +771,27 @@ class HLL::Backend::MoarVM {
         0
     }
 
+    method start($source, *%adverbs) {
+        if nqp::existskey(%*COMPILING, 'moar') {
+            nqp::push(%*COMPILING<moar><frames>, nqp::list);
+        }
+        else {
+            %*COMPILING<moar> := my %moar := nqp::hash;
+            %moar<mast_frames> := nqp::hash;
+            %moar<sc_handles>  := nqp::list;
+            %moar<sc_lookup>   := nqp::hash;
+            %moar<string-heap> := $StringHeap.new;
+            %moar<callsites>   := $Callsites.new(:string-heap(%moar<string-heap>));
+            %moar<extop_sigs>  := nqp::list;
+            %moar<extop_names> := nqp::list;
+            %moar<extop_idx>   := nqp::hash;
+            %moar<frames>      := [ nqp::list ];
+        }
+        $source
+    }
+
     method mast($qast, *%adverbs) {
-        nqp::getcomp('QAST').to_mast($qast, %adverbs<mast_frames> // nqp::hash());
+        nqp::getcomp('QAST').to_mast($qast);
     }
 
     method mbc($mast, *%adverbs) {

@@ -39,10 +39,10 @@ Resolve any problems that may still exist. Issues that impact backends
 other than MoarVM may potentially be ignored for a release for now.
 Check on the IRC channel if you have any questions.
 
-You will need JVM installed for the jvm tests to run. On Debian, you
-can install it with:
+You will need a JDK (Java Development Kit) installed for building and
+running tests for the jvm backend. On Debian, you can install it with:
 
-    sudo apt-get install openjdk-7-jdk openjdk-7-jre
+    sudo apt-get install openjdk-11-jdk
 
 =item 4.
 
@@ -77,17 +77,15 @@ Sign the tarball:
 
 =item 8
 
-Upload the release tarball and signature to L<http://rakudo.org/downloads/nqp>
-and L<https://rakudo.perl6.org/downloads/nqp/>:
+Upload the release tarball and signature to L<http://rakudo.org/downloads/nqp>:
 
   scp nqp-2013.12.tar.gz nqp-2013.12.tar.gz.asc \
         rakudo@rakudo.org:public_html/downloads/nqp/
-  scp nqp-2013.12.tar.gz nqp-2013.12.tar.gz.asc \
-        rakudo@www.p6c.org:public_html/downloads/nqp/
+  
 
 If you do not have permissions for that, ask one of (pmichaud, jnthn, FROGGS,
 masak, tadzik, moritz, PerlJam/perlpilot, [Coke], lizmat, timotimo, fsergot,
-hoelzro, Zoffix) on #perl6 or #perl6-dev to do it for you.
+hoelzro, Zoffix) on #raku or #raku-dev to do it for you.
 
 =item 9.
 

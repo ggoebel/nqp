@@ -92,7 +92,7 @@ class QAST::MASTOperations {
         my $mapper;
         if $hll {
             my %ops := %hll_ops{$hll};
-            $mapper := %ops{$name} if %ops;
+            $mapper := %ops{$name} if nqp::isconcrete(%ops) && nqp::elems(%ops);
         }
         $mapper := %core_ops{$name} unless $mapper;
         $mapper
@@ -501,9 +501,9 @@ QAST::MASTOperations.add_core_op('list', -> $qastcomp, $op {
         :op('create'),
         QAST::Op.new( :op('hlllist') )
     ));
-    if +$op.list {
+    if nqp::elems($op.list) {
         my $arr_reg := $arr.result_reg;
-        pre-size-array($qastcomp, $arr, $arr_reg, +$op.list);
+        pre-size-array($qastcomp, $arr, $arr_reg, nqp::elems($op.list));
         # Push things to the list.
         for $op.list {
             my $item := $qastcomp.as_mast($_, :want($MVM_reg_obj));
@@ -524,9 +524,9 @@ QAST::MASTOperations.add_core_op('list_i', -> $qastcomp, $op {
         :op('create'),
         QAST::Op.new( :op('bootintarray') )
     ));
-    if +$op.list {
+    if nqp::elems($op.list) {
         my $arr_reg := $arr.result_reg;
-        pre-size-array($qastcomp, $arr, $arr_reg, +$op.list);
+        pre-size-array($qastcomp, $arr, $arr_reg, nqp::elems($op.list));
         # Push things to the list.
         for $op.list {
             my $item := $qastcomp.as_mast($_, :want($MVM_reg_int64));
@@ -547,9 +547,9 @@ QAST::MASTOperations.add_core_op('list_n', -> $qastcomp, $op {
         :op('create'),
         QAST::Op.new( :op('bootnumarray') )
     ));
-    if +$op.list {
+    if nqp::elems($op.list) {
         my $arr_reg := $arr.result_reg;
-        pre-size-array($qastcomp, $arr, $arr_reg, +$op.list);
+        pre-size-array($qastcomp, $arr, $arr_reg, nqp::elems($op.list));
         # Push things to the list.
         for $op.list {
             my $item := $qastcomp.as_mast($_, :want($MVM_reg_num64));
@@ -570,9 +570,9 @@ QAST::MASTOperations.add_core_op('list_s', -> $qastcomp, $op {
         :op('create'),
         QAST::Op.new( :op('bootstrarray') )
     ));
-    if +$op.list {
+    if nqp::elems($op.list) {
         my $arr_reg := $arr.result_reg;
-        pre-size-array($qastcomp, $arr, $arr_reg, +$op.list);
+        pre-size-array($qastcomp, $arr, $arr_reg, nqp::elems($op.list));
         # Push things to the list.
         for $op.list {
             my $item := $qastcomp.as_mast($_, :want($MVM_reg_str));
@@ -593,9 +593,9 @@ QAST::MASTOperations.add_core_op('list_b', -> $qastcomp, $op {
         :op('create'),
         QAST::Op.new( :op('bootarray') )
     ));
-    if +$op.list {
+    if nqp::elems($op.list) {
         my $arr_reg := $arr.result_reg;
-        pre-size-array($qastcomp, $arr, $arr_reg, +$op.list);
+        pre-size-array($qastcomp, $arr, $arr_reg, nqp::elems($op.list));
         # Push things to the list.
         my $item_reg := $regalloc.fresh_register($MVM_reg_obj);
         for $op.list {
@@ -618,9 +618,6 @@ QAST::MASTOperations.add_core_op('numify', -> $qastcomp, $op {
 QAST::MASTOperations.add_core_op('intify', -> $qastcomp, $op {
     $qastcomp.as_mast($op[0], :want($MVM_reg_int64))
 });
-QAST::MASTOperations.add_core_op('qlist', -> $qastcomp, $op {
-    $qastcomp.as_mast(QAST::Op.new( :op('list'), |@($op) ))
-});
 QAST::MASTOperations.add_core_op('hash', -> $qastcomp, $op {
     # Just desugar to create the empty hash.
     my $regalloc := $*REGALLOC;
@@ -628,7 +625,7 @@ QAST::MASTOperations.add_core_op('hash', -> $qastcomp, $op {
         :op('create'),
         QAST::Op.new( :op('hllhash') )
     ));
-    if +$op.list {
+    if nqp::elems($op.list) {
         my $hash_reg := $hash.result_reg;
         for $op.list -> $key, $val {
             my $key_mast := $qastcomp.as_mast($key, :want($MVM_reg_str));
@@ -724,7 +721,7 @@ sub needs_cond_passed($n) {
 for <if unless with without> -> $op_name {
     QAST::MASTOperations.add_core_op($op_name, -> $qastcomp, $op {
         # Check operand count.
-        my $operands := +$op.list;
+        my $operands := nqp::elems($op.list);
         nqp::die("The '$op_name' op needs 2 or 3 operands, got $operands")
             if $operands < 2 || $operands > 3;
 
@@ -938,8 +935,8 @@ for <if unless with without> -> $op_name {
 }
 
 QAST::MASTOperations.add_core_op('defor', -> $qastcomp, $op {
-    if +$op.list != 2 {
-        nqp::die("The 'defor' op needs 2 operands, got " ~ +$op.list);
+    if nqp::elems($op.list) != 2 {
+        nqp::die("The 'defor' op needs 2 operands, got " ~ nqp::elems($op.list));
     }
 
     # Compile the expression.
@@ -969,7 +966,6 @@ QAST::MASTOperations.add_core_op('defor', -> $qastcomp, $op {
 });
 
 QAST::MASTOperations.add_core_op('xor', -> $qastcomp, $op {
-    my @ops;
     my int $res_kind   := $MVM_reg_obj;
     my $res_reg    := $*REGALLOC.fresh_o();
     my $t          := $*REGALLOC.fresh_i();
@@ -1046,8 +1042,8 @@ QAST::MASTOperations.add_core_op('xor', -> $qastcomp, $op {
 });
 
 QAST::MASTOperations.add_core_op('ifnull', -> $qastcomp, $op {
-    if +$op.list != 2 {
-        nqp::die("The 'ifnull' op needs 2 operands, got " ~ +$op.list);
+    if nqp::elems($op.list) != 2 {
+        nqp::die("The 'ifnull' op needs 2 operands, got " ~ nqp::elems($op.list));
     }
 
     # Compile the expression.
@@ -1315,8 +1311,8 @@ QAST::MASTOperations.add_core_op('for', -> $qastcomp, $op {
         else { @operands.push($_) }
     }
 
-    if +@operands != 2 {
-        nqp::die("The 'for' op needs 2 operands, got " ~ +@operands);
+    if nqp::elems(@operands) != 2 {
+        nqp::die("The 'for' op needs 2 operands, got " ~ nqp::elems(@operands));
     }
     unless nqp::istype(@operands[1], QAST::Block) {
         nqp::die("The 'for' op expects a block as its second operand, got " ~ @operands[1].HOW.name(@operands[1]));
@@ -1493,7 +1489,7 @@ my $call_gen := sub ($qastcomp, $op) {
                 ?? QAST::VM.new( :moarop('getlexstatic_o'), QAST::SVal.new( :value($op.name) ) )
                 !! QAST::Var.new( :name($op.name), :scope('lexical') )));
     }
-    elsif +@args {
+    elsif nqp::elems(@args) {
         @args := nqp::clone(@args);
         my $callee_qast := @args.shift;
         my $no_decont := nqp::istype($callee_qast, QAST::Op) && $callee_qast.op eq 'speshresolve'
@@ -1635,7 +1631,7 @@ QAST::MASTOperations.add_core_moarop_mapping('getarg_i', 'getarg_i');
 
 QAST::MASTOperations.add_core_op('callmethod', -> $qastcomp, $op {
     my @args := nqp::clone($op.list);
-    if +@args == 0 {
+    if nqp::elems(@args) == 0 {
         nqp::die('Method call node requires at least one child');
     }
     # evaluate the invocant expression
@@ -1645,7 +1641,7 @@ QAST::MASTOperations.add_core_op('callmethod', -> $qastcomp, $op {
     if $op.name {
         # great!
     }
-    elsif +@args >= 1 {
+    elsif nqp::elems(@args) >= 1 {
         $methodname_expr := @args.shift();
     }
     else {
@@ -1792,7 +1788,7 @@ QAST::MASTOperations.add_core_op('callmethod', -> $qastcomp, $op {
 QAST::MASTOperations.add_core_op('bind', -> $qastcomp, $op {
     # Sanity checks.
     my @children := $op.list;
-    if +@children != 2 {
+    if nqp::elems(@children) != 2 {
         nqp::die("The 'bind' op needs 2 children, got " ~ +@children);
     }
     unless nqp::istype(@children[0], QAST::Var) {
@@ -1843,7 +1839,7 @@ my %handler_names := nqp::hash(
 );
 QAST::MASTOperations.add_core_op('handle', :!inlinable, sub ($qastcomp, $op) {
     my @children := nqp::clone($op.list());
-    if @children == 0 {
+    if nqp::elems(@children) == 0 {
         nqp::die("The 'handle' op requires at least one child");
     }
 
@@ -1934,7 +1930,7 @@ QAST::MASTOperations.add_core_op('handle', :!inlinable, sub ($qastcomp, $op) {
 # Simple payload handler.
 QAST::MASTOperations.add_core_op('handlepayload', :!inlinable, sub ($qastcomp, $op) {
     my @children := $op.list;
-    if @children != 3 {
+    if nqp::elems(@children) != 3 {
         nqp::die("The 'handlepayload' op needs 3 children, got " ~ +@children);
     }
     my str $type := @children[1];
@@ -2507,8 +2503,8 @@ QAST::MASTOperations.add_core_moarop_mapping('indexingoptimized', 'indexingoptim
 
 QAST::MASTOperations.add_core_op('tclc', -> $qastcomp, $op {
     my @operands := $op.list;
-    unless +@operands == 1 {
-        nqp::die("The 'tclc' op needs 1 argument, got " ~ +@operands);
+    unless nqp::elems(@operands) == 1 {
+        nqp::die("The 'tclc' op needs 1 argument, got " ~ nqp::elems(@operands));
     }
     $qastcomp.as_mast(
             QAST::Op.new( :op('concat'),
@@ -2529,27 +2525,27 @@ QAST::MASTOperations.add_core_moarop_mapping('eqaticim', 'eqaticim_s');
 
 QAST::MASTOperations.add_core_op('substr', -> $qastcomp, $op {
     my @operands := $op.list;
-    if +@operands == 2 { nqp::push(@operands, QAST::IVal.new( :value(-1) )) }
+    if nqp::elems(@operands) == 2 { nqp::push(@operands, QAST::IVal.new( :value(-1) )) }
     $qastcomp.as_mast(QAST::Op.new( :op('substr_s'), |@operands ));
 });
 
 QAST::MASTOperations.add_core_op('ord',  -> $qastcomp, $op {
     my @operands := $op.list;
-    $qastcomp.as_mast(+@operands == 1
+    $qastcomp.as_mast(nqp::elems(@operands) == 1
         ?? QAST::Op.new( :op('ordfirst'), |@operands )
         !! QAST::Op.new( :op('ordat'), |@operands ));
 });
 
 QAST::MASTOperations.add_core_op('index',  -> $qastcomp, $op {
     my @operands := $op.list;
-    $qastcomp.as_mast(+@operands == 2
+    $qastcomp.as_mast(nqp::elems(@operands) == 2
         ?? QAST::Op.new( :op('indexfrom'), |@operands, QAST::IVal.new( :value(0)) )
         !! QAST::Op.new( :op('indexfrom'), |@operands ));
 });
 
 QAST::MASTOperations.add_core_op('rindex',  -> $qastcomp, $op {
     my @operands := $op.list;
-    $qastcomp.as_mast(+@operands == 2
+    $qastcomp.as_mast(nqp::elems(@operands) == 2
         ?? QAST::Op.new( :op('rindexfrom'), |@operands, QAST::IVal.new( :value(-1) ) )
         !! QAST::Op.new( :op('rindexfrom'), |@operands ));
 });
@@ -2776,8 +2772,8 @@ QAST::MASTOperations.add_core_moarop_mapping('iscont_n', 'iscont_n');
 QAST::MASTOperations.add_core_moarop_mapping('iscont_s', 'iscont_s');
 QAST::MASTOperations.add_core_moarop_mapping('isrwcont', 'isrwcont');
 QAST::MASTOperations.add_core_op('decont', -> $qastcomp, $op {
-    if +$op.list != 1 {
-        nqp::die("The 'decont' op needs 1 operand, got " ~ +$op.list);
+    if nqp::elems($op.list) != 1 {
+        nqp::die("The 'decont' op needs 1 operand, got " ~ nqp::elems($op.list));
     }
     my $regalloc := $*REGALLOC;
     my $res_reg := $regalloc.fresh_o();
@@ -2935,8 +2931,8 @@ sub try_get_bind_scope($var) {
 sub add_native_assign_op($op_name, $kind) {
     QAST::MASTOperations.add_core_op($op_name, -> $qastcomp, $op {
         my @operands := $op.list;
-        unless +@operands == 2 {
-            nqp::die("The '$op' op needs 2 arguments, got " ~ +@operands);
+        unless nqp::elems(@operands) == 2 {
+            nqp::die("The '$op' op needs 2 arguments, got " ~ nqp::elems(@operands));
         }
         my $target := @operands[0];
         if try_get_bind_scope($target) -> $bind_scope {
@@ -3005,9 +3001,9 @@ QAST::MASTOperations.add_core_op('locallifetime', -> $qastcomp, $op {
 # code object related opcodes
 # XXX explicit takeclosure will go away under new model; for now, no-op it.
 QAST::MASTOperations.add_core_op('takeclosure', -> $qastcomp, $op {
-    unless nqp::elems(@($op)) == 1 {
+    unless nqp::elems($op) == 1 {
         nqp::die("The 'takeclosure' op needs 1 argument, got "
-            ~ nqp::elems(@($op)));
+            ~ nqp::elems($op));
     }
     $qastcomp.as_mast($op[0])
 });
@@ -3018,12 +3014,12 @@ QAST::MASTOperations.add_core_moarop_mapping('setcodename', 'setcodename', 0);
 QAST::MASTOperations.add_core_moarop_mapping('forceouterctx', 'forceouterctx', 0);
 QAST::MASTOperations.add_core_moarop_mapping('setdispatcher', 'setdispatcher', 0);
 QAST::MASTOperations.add_core_moarop_mapping('setdispatcherfor', 'setdispatcherfor', 0);
+QAST::MASTOperations.add_core_moarop_mapping('nextdispatcherfor', 'nextdispatcherfor', 0);
 QAST::MASTOperations.add_core_op('takedispatcher', -> $qastcomp, $op {
     my $regalloc := $*REGALLOC;
     unless nqp::istype($op[0], QAST::SVal) {
         nqp::die("The 'takedispatcher' op must have a single QAST::SVal child, got " ~ $op[0].HOW.name($op[0]));
     }
-    my @ops;
     my $disp_reg   := $regalloc.fresh_register($MVM_reg_obj);
     my $isnull_reg := $regalloc.fresh_register($MVM_reg_int64);
     my $done_lbl   := MAST::Label.new();
@@ -3038,7 +3034,27 @@ QAST::MASTOperations.add_core_op('takedispatcher', -> $qastcomp, $op {
     $regalloc.release_register($isnull_reg, $MVM_reg_int64);
     MAST::InstructionList.new(MAST::VOID, $MVM_reg_void)
 });
+QAST::MASTOperations.add_core_op('takenextdispatcher', -> $qastcomp, $op {
+    my $regalloc := $*REGALLOC;
+    unless nqp::istype($op[0], QAST::SVal) {
+        nqp::die("The 'takenextdispatcher' op must have a single QAST::SVal child, got " ~ $op[0].HOW.name($op[0]));
+    }
+    my $disp_reg   := $regalloc.fresh_register($MVM_reg_obj);
+    my $isnull_reg := $regalloc.fresh_register($MVM_reg_int64);
+    my $done_lbl   := MAST::Label.new();
+    %core_op_generators{'takenextdispatcher'}($disp_reg);
+    %core_op_generators{'isnull'}($isnull_reg, $disp_reg);
+    %core_op_generators{'if_i'}($isnull_reg, $done_lbl);
+    if $*BLOCK.lexical($op[0].value) -> $lex {
+        %core_op_generators{'bindlex'}($lex, $disp_reg);
+    }
+    $*MAST_FRAME.add-label($done_lbl);
+    $regalloc.release_register($disp_reg, $MVM_reg_obj);
+    $regalloc.release_register($isnull_reg, $MVM_reg_int64);
+    MAST::InstructionList.new(MAST::VOID, $MVM_reg_void)
+});
 QAST::MASTOperations.add_core_moarop_mapping('cleardispatcher', 'takedispatcher');
+QAST::MASTOperations.add_core_moarop_mapping('clearnextdispatcher', 'takenextdispatcher');
 QAST::MASTOperations.add_core_moarop_mapping('freshcoderef', 'freshcoderef');
 QAST::MASTOperations.add_core_moarop_mapping('iscoderef', 'iscoderef');
 QAST::MASTOperations.add_core_moarop_mapping('markcodestatic', 'markcodestatic');
@@ -3144,6 +3160,7 @@ QAST::MASTOperations.add_core_moarop_mapping('cpucores', 'cpucores');
 QAST::MASTOperations.add_core_moarop_mapping('freemem', 'freemem');
 QAST::MASTOperations.add_core_moarop_mapping('totalmem', 'totalmem');
 QAST::MASTOperations.add_core_moarop_mapping('threadlockcount', 'threadlockcount');
+QAST::MASTOperations.add_core_moarop_mapping('setthreadname', 'setthreadname');
 
 # asynchrony related ops
 QAST::MASTOperations.add_core_moarop_mapping('timer', 'timer');

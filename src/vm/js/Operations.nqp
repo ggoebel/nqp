@@ -1932,7 +1932,7 @@ class QAST::OperationsJS {
     add_simple_op('isne_snfg', $T_INT, [$T_STR, $T_STR]);
 
     add_simple_op('getjsattr', $T_OBJ, [$T_OBJ, $T_STR], :decont(0), :ctx);
-    add_simple_op('setjsattr', $T_OBJ, [$T_OBJ, $T_STR, $T_OBJ], :decont(0, 2), :ctx, :side_effects);
+    add_simple_op('setjsattr', $T_OBJ, [$T_OBJ, $T_STR, $T_OBJ], :decont(0, 2), :ctx, :side_effects, :await);
 
     add_simple_op('writeint', $T_VOID, [$T_OBJ, $T_INT, $T_INT, $T_INT], :side_effects);
     add_simple_op('writeuint', $T_VOID, [$T_OBJ, $T_INT, $T_UINT32, $T_INT], :side_effects);
@@ -1942,6 +1942,9 @@ class QAST::OperationsJS {
     add_simple_op('readnum', $T_NUM, [$T_OBJ, $T_INT, $T_INT]);
 
     add_simple_op('decodelocaltime', $T_OBJ, [$T_INT], :side_effects);
+
+    add_simple_op('jsruntimerequire', $T_OBJ, [$T_STR, $T_STR], :ctx, :side_effects);
+    add_simple_op('jscompiletimerequire', $T_OBJ, [$T_STR, $T_STR], :ctx, :side_effects);
 
     method add_hll_unbox($hll, $type, $method_name) {
         unless nqp::existskey(%hll_unbox, $hll) {

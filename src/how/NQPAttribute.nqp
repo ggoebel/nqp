@@ -33,6 +33,14 @@ knowhow NQPAttribute {
         $!has_type ?? $!type !! nqp::null()
     }
 
+    method is_built() {
+        0
+    }
+
+    method is_bound() {
+        0
+    }
+
     method has_accessor() {
         0
     }

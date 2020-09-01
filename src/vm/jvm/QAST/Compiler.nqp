@@ -41,15 +41,15 @@ my $IVAL_MINUSONE := JAST::PushIVal.new( :value(-1) );
 my $NVAL_ZERO     := JAST::PushNVal.new( :value(0.0) );
 
 # Some common types we'll need.
-my $TYPE_TC         := 'Lorg/perl6/nqp/runtime/ThreadContext;';
-my $TYPE_CU         := 'Lorg/perl6/nqp/runtime/CompilationUnit;';
-my $TYPE_CR         := 'Lorg/perl6/nqp/runtime/CodeRef;';
-my $TYPE_CF         := 'Lorg/perl6/nqp/runtime/CallFrame;';
-my $TYPE_OPS        := 'Lorg/perl6/nqp/runtime/Ops;';
-my $TYPE_NATIVE_OPS := 'Lorg/perl6/nqp/runtime/NativeCallOps;';
-my $TYPE_IO_OPS     := 'Lorg/perl6/nqp/runtime/IOOps;';
-my $TYPE_CSD        := 'Lorg/perl6/nqp/runtime/CallSiteDescriptor;';
-my $TYPE_SMO        := 'Lorg/perl6/nqp/sixmodel/SixModelObject;';
+my $TYPE_TC         := 'Lorg/raku/nqp/runtime/ThreadContext;';
+my $TYPE_CU         := 'Lorg/raku/nqp/runtime/CompilationUnit;';
+my $TYPE_CR         := 'Lorg/raku/nqp/runtime/CodeRef;';
+my $TYPE_CF         := 'Lorg/raku/nqp/runtime/CallFrame;';
+my $TYPE_OPS        := 'Lorg/raku/nqp/runtime/Ops;';
+my $TYPE_NATIVE_OPS := 'Lorg/raku/nqp/runtime/NativeCallOps;';
+my $TYPE_IO_OPS     := 'Lorg/raku/nqp/runtime/IOOps;';
+my $TYPE_CSD        := 'Lorg/raku/nqp/runtime/CallSiteDescriptor;';
+my $TYPE_SMO        := 'Lorg/raku/nqp/sixmodel/SixModelObject;';
 my $TYPE_STR        := 'Ljava/lang/String;';
 my $TYPE_OBJ        := 'Ljava/lang/Object;';
 my $TYPE_MATH       := 'Ljava/lang/Math;';
@@ -60,13 +60,13 @@ my $TYPE_MHL        := 'Ljava/lang/invoke/MethodHandles$Lookup;';
 my $TYPE_CLASS      := 'Ljava/lang/Class;';
 my $TYPE_LONG       := 'Ljava/lang/Long;';
 my $TYPE_DOUBLE     := 'Ljava/lang/Double;';
-my $TYPE_EH         := 'Lorg/perl6/nqp/runtime/ExceptionHandling;';
-my $TYPE_EX_UNWIND  := 'Lorg/perl6/nqp/runtime/UnwindException;';
-my $TYPE_EX_CONT    := 'Lorg/perl6/nqp/runtime/ControlException;';
+my $TYPE_EH         := 'Lorg/raku/nqp/runtime/ExceptionHandling;';
+my $TYPE_EX_UNWIND  := 'Lorg/raku/nqp/runtime/UnwindException;';
+my $TYPE_EX_CONT    := 'Lorg/raku/nqp/runtime/ControlException;';
 my $TYPE_EX_RT      := 'Ljava/lang/RuntimeException;';
-my $TYPE_EX_SAVE    := 'Lorg/perl6/nqp/runtime/SaveStackException;';
+my $TYPE_EX_SAVE    := 'Lorg/raku/nqp/runtime/SaveStackException;';
 my $TYPE_THROWABLE  := 'Ljava/lang/Throwable;';
-my $TYPE_RESUME     := 'Lorg/perl6/nqp/runtime/ResumeStatus$Frame;';
+my $TYPE_RESUME     := 'Lorg/raku/nqp/runtime/ResumeStatus$Frame;';
 
 # Exception handler categories.
 my $EX_CAT_CATCH   := 1;
@@ -302,7 +302,7 @@ class QAST::OperationsJAST {
         self.set_core_op_result_type($op, $stack_out);
     }
 
-    # Adds a core nqp:: op provided by a static method in the
+    # Adds a HLL nqp:: op provided by a static method in the
     # class library.
     method map_classlib_hll_op($hll, $op, $class, $method, @stack_in, $stack_out, :$tc, :$cont, :$inlinable = 1) {
         my @jtypes_in;
@@ -514,7 +514,7 @@ my $chain_codegen := sub ($qastcomp, $op) {
         $il.append(JAST::Instruction.new( :op('aload'), $atmp ));
         $il.append(JAST::Instruction.new( :op('aload'), $btmp ));
         $il.append(savesite(JAST::InvokeDynamic.new(
-            $indy_meth, 'V', @argTypes, 'org/perl6/nqp/runtime/IndyBootstrap', $indy_meth,
+            $indy_meth, 'V', @argTypes, 'org/raku/nqp/runtime/IndyBootstrap', $indy_meth,
         )));
         $il.append(JAST::Instruction.new( :op('aload'), 'cf' ));
         $il.append(JAST::Instruction.new( :op('invokestatic'), $TYPE_OPS,
@@ -694,9 +694,6 @@ QAST::OperationsJAST.add_core_op('intify', -> $qastcomp, $op {
 });
 QAST::OperationsJAST.add_core_op('numify', -> $qastcomp, $op {
     $qastcomp.as_jast($op[0], :want($RT_NUM))
-});
-QAST::OperationsJAST.add_core_op('qlist', -> $qastcomp, $op {
-    $qastcomp.as_jast(QAST::Op.new( :op('list'), |@($op) ))
 });
 QAST::OperationsJAST.add_core_op('hash', -> $qastcomp, $op {
     # Just desugar to create the empty hash.
@@ -1073,7 +1070,11 @@ QAST::OperationsJAST.add_core_op('ifnull', -> $qastcomp, $op {
     my $lbl := JAST::Label.new( :name($qastcomp.unique('ifnull_')) );
     $*STACK.obtain($il, $expr);
     $il.append($DUP);
-    $il.append(JAST::Instruction.new( :op('ifnonnull'), $lbl ));
+    $il.append(JAST::Instruction.new( :op('invokestatic'),
+        $TYPE_OPS, 'isnull', 'Long', $TYPE_SMO));
+    $il.append($IVAL_ZERO);
+    $il.append($LCMP);
+    $il.append(JAST::Instruction.new( :op('ifeq'), $lbl ));
 
     # Emit "then" part.
     $il.append($POP);
@@ -1475,7 +1476,7 @@ my $call_codegen := sub ($qastcomp, $node) {
         my $indy_meth := $node.op eq 'callstatic' ?? 'subcallstatic_noa' !! 'subcall_noa';
         $il.append(savesite(JAST::InvokeDynamic.new(
             $indy_meth, 'V', @argstuff[2],
-            'org/perl6/nqp/runtime/IndyBootstrap', $indy_meth
+            'org/raku/nqp/runtime/IndyBootstrap', $indy_meth
         )));
     }
 
@@ -1498,7 +1499,7 @@ my $call_codegen := sub ($qastcomp, $node) {
         $*STACK.obtain($il, |@argstuff[1]) if @argstuff[1];
         $il.append(savesite(JAST::InvokeDynamic.new(
             'indcall_noa', 'V', @argstuff[2],
-            'org/perl6/nqp/runtime/IndyBootstrap', 'indcall_noa'
+            'org/raku/nqp/runtime/IndyBootstrap', 'indcall_noa'
         )));
     }
 
@@ -1534,7 +1535,7 @@ QAST::OperationsJAST.add_core_op('callmethod', -> $qastcomp, $node {
         $*STACK.obtain($il, |@argstuff[1]) if @argstuff[1];
         $il.append(savesite(JAST::InvokeDynamic.new(
             'methcall_noa', 'V', @argstuff[2],
-            'org/perl6/nqp/runtime/IndyBootstrap', 'methcall_noa',
+            'org/raku/nqp/runtime/IndyBootstrap', 'methcall_noa',
         )));
     }
 
@@ -1563,7 +1564,7 @@ QAST::OperationsJAST.add_core_op('callmethod', -> $qastcomp, $node {
         $*STACK.obtain($il, |@argstuff[1]) if @argstuff[1];
         $il.append(savesite(JAST::InvokeDynamic.new(
             'indmethcall_noa', 'V', @argstuff[2],
-            'org/perl6/nqp/runtime/IndyBootstrap', 'indmethcall_noa'
+            'org/raku/nqp/runtime/IndyBootstrap', 'indmethcall_noa'
         )));
     }
 
@@ -1729,7 +1730,7 @@ QAST::OperationsJAST.add_core_op('handle', :!inlinable, sub ($qastcomp, $op) {
 
     # Handle any runtime exceptions (Throwable) that are not ControlException.
     my $erril := JAST::InstructionList.new();
-    my $nclab   := JAST::Label.new( :name( $qastcomp.unique('non_cont_ex') ) );
+    my $nclab := JAST::Label.new( :name( $qastcomp.unique('non_cont_ex') ) );
     $erril.append($DUP);
     $erril.append(JAST::Instruction.new( :op('instanceof'), $TYPE_EX_CONT ));
     $erril.append(JAST::Instruction.new( :op('ifeq'), $nclab ));
@@ -1741,7 +1742,7 @@ QAST::OperationsJAST.add_core_op('handle', :!inlinable, sub ($qastcomp, $op) {
         $TYPE_EH, 'dieInternal', $TYPE_EX_RT, $TYPE_TC, $TYPE_THROWABLE ));
     $erril.append($ATHROW);
 
-    # Inner try/catch block to catch runtime exceptions (Throwable)
+    # Inner try/catch block to catch runtime exceptions (Throwable).
     my $inner := JAST::InstructionList.new();
     $inner.append(JAST::TryCatch.new( :try($tryil), :catch($erril), :type($TYPE_THROWABLE) ));
 
@@ -2175,24 +2176,15 @@ QAST::OperationsJAST.map_classlib_core_op('fileislink', $TYPE_OPS, 'fileislink',
 QAST::OperationsJAST.map_classlib_core_op('getstdin', $TYPE_OPS, 'getstdin', [], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('getstdout', $TYPE_OPS, 'getstdout', [], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('getstderr', $TYPE_OPS, 'getstderr', [], $RT_OBJ, :tc);
-QAST::OperationsJAST.map_classlib_core_op('setencoding', $TYPE_OPS, 'setencoding', [$RT_OBJ, $RT_STR], $RT_OBJ, :tc);
-QAST::OperationsJAST.map_classlib_core_op('setinputlinesep', $TYPE_OPS, 'setinputlinesep', [$RT_OBJ, $RT_STR], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('seekfh', $TYPE_OPS, 'seekfh', [$RT_OBJ, $RT_INT, $RT_INT], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('tellfh', $TYPE_OPS, 'tellfh', [$RT_OBJ], $RT_INT, :tc);
 QAST::OperationsJAST.map_classlib_core_op('lockfh', $TYPE_OPS, 'lockfh', [$RT_OBJ, $RT_INT], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('unlockfh', $TYPE_OPS, 'unlockfh', [$RT_OBJ], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('readfh', $TYPE_OPS, 'readfh', [$RT_OBJ, $RT_OBJ, $RT_INT], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('writefh', $TYPE_OPS, 'writefh', [$RT_OBJ, $RT_OBJ], $RT_INT, :tc);
-QAST::OperationsJAST.map_classlib_core_op('printfh', $TYPE_OPS, 'printfh', [$RT_OBJ, $RT_STR], $RT_INT, :tc);
-QAST::OperationsJAST.map_classlib_core_op('sayfh', $TYPE_OPS, 'sayfh', [$RT_OBJ, $RT_STR], $RT_INT, :tc);
 QAST::OperationsJAST.map_classlib_core_op('flushfh', $TYPE_OPS, 'flushfh', [$RT_OBJ], $RT_OBJ, :tc);
-QAST::OperationsJAST.map_classlib_core_op('readcharsfh', $TYPE_OPS, 'readcharsfh', [$RT_OBJ, $RT_INT], $RT_STR, :tc);
-QAST::OperationsJAST.map_classlib_core_op('readlinefh', $TYPE_OPS, 'readlinefh', [$RT_OBJ], $RT_STR, :tc);
-QAST::OperationsJAST.map_classlib_core_op('readlinechompfh', $TYPE_OPS, 'readlinechompfh', [$RT_OBJ], $RT_STR, :tc);
-QAST::OperationsJAST.map_classlib_core_op('readallfh', $TYPE_OPS, 'readallfh', [$RT_OBJ], $RT_STR, :tc);
 QAST::OperationsJAST.map_classlib_core_op('eoffh', $TYPE_OPS, 'eoffh', [$RT_OBJ], $RT_INT, :tc);
 QAST::OperationsJAST.map_classlib_core_op('closefh', $TYPE_OPS, 'closefh', [$RT_OBJ], $RT_OBJ, :tc);
-QAST::OperationsJAST.map_classlib_core_op('closefh_i', $TYPE_OPS, 'closefhi', [$RT_OBJ], $RT_INT, :tc);
 
 QAST::OperationsJAST.map_classlib_core_op('isttyfh', $TYPE_OPS, 'isttyfh', [$RT_OBJ], $RT_INT, :tc);
 QAST::OperationsJAST.map_classlib_core_op('filenofh', $TYPE_OPS, 'filenofh', [$RT_OBJ], $RT_INT, :tc);
@@ -2210,20 +2202,11 @@ QAST::OperationsJAST.map_classlib_core_op('link', $TYPE_OPS, 'link', [$RT_STR, $
 
 QAST::OperationsJAST.map_classlib_core_op('gethostname', $TYPE_OPS, 'gethostname', [], $RT_STR);
 
-QAST::OperationsJAST.map_classlib_core_op('shell', $TYPE_OPS, 'shell', [$RT_STR, $RT_STR, $RT_OBJ, $RT_OBJ, $RT_OBJ, $RT_OBJ, $RT_INT], $RT_INT, :tc);
-QAST::OperationsJAST.map_classlib_core_op('spawn', $TYPE_OPS, 'spawn', [$RT_OBJ, $RT_STR, $RT_OBJ, $RT_OBJ, $RT_OBJ, $RT_OBJ, $RT_INT], $RT_INT, :tc);
-QAST::OperationsJAST.map_classlib_core_op('syncpipe', $TYPE_OPS, 'syncpipe', [], $RT_OBJ, :tc);
-
 QAST::OperationsJAST.map_classlib_core_op('symlink', $TYPE_OPS, 'symlink', [$RT_STR, $RT_STR], $RT_INT, :tc);
 
 QAST::OperationsJAST.map_classlib_core_op('opendir', $TYPE_OPS, 'opendir', [$RT_STR], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('nextfiledir', $TYPE_OPS, 'nextfiledir', [$RT_OBJ], $RT_STR, :tc);
 QAST::OperationsJAST.map_classlib_core_op('closedir', $TYPE_OPS, 'closedir', [$RT_OBJ], $RT_INT, :tc);
-
-QAST::OperationsJAST.map_classlib_core_op('openasync', $TYPE_OPS, 'openasync', [$RT_STR, $RT_STR], $RT_OBJ, :tc);
-QAST::OperationsJAST.map_classlib_core_op('slurpasync', $TYPE_OPS, 'slurpasync', [$RT_OBJ, $RT_OBJ, $RT_OBJ, $RT_OBJ], $RT_OBJ, :tc);
-QAST::OperationsJAST.map_classlib_core_op('linesasync', $TYPE_OPS, 'linesasync', [$RT_OBJ, $RT_OBJ, $RT_INT, $RT_OBJ, $RT_OBJ, $RT_OBJ], $RT_OBJ, :tc);
-QAST::OperationsJAST.map_classlib_core_op('spurtasync', $TYPE_OPS, 'spurtasync', [$RT_OBJ, $RT_OBJ, $RT_OBJ, $RT_OBJ, $RT_OBJ], $RT_OBJ, :tc);
 
 QAST::OperationsJAST.map_classlib_core_op('socket', $TYPE_OPS, 'socket', [$RT_INT], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('connect', $TYPE_OPS, 'connect', [$RT_OBJ, $RT_STR, $RT_INT, $RT_INT], $RT_OBJ, :tc);
@@ -2605,7 +2588,6 @@ QAST::OperationsJAST.map_classlib_core_op('iterval', $TYPE_OPS, 'iterval', [$RT_
 
 (-> {
 # object opcodes
-QAST::OperationsJAST.map_jvm_core_op('null', 'aconst_null', [], $RT_OBJ);
 QAST::OperationsJAST.map_jvm_core_op('null_s', 'aconst_null', [], $RT_STR);
 QAST::OperationsJAST.map_classlib_core_op('what', $TYPE_OPS, 'what', [$RT_OBJ], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('how', $TYPE_OPS, 'how', [$RT_OBJ], $RT_OBJ, :tc);
@@ -2631,6 +2613,7 @@ QAST::OperationsJAST.map_classlib_core_op('hllhash', $TYPE_OPS, 'hllhash', [], $
 QAST::OperationsJAST.map_classlib_core_op('create', $TYPE_OPS, 'create', [$RT_OBJ], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('clone', $TYPE_OPS, 'clone', [$RT_OBJ], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('isconcrete', $TYPE_OPS, 'isconcrete', [$RT_OBJ], $RT_INT, :tc);
+QAST::OperationsJAST.map_classlib_core_op('null', $TYPE_OPS, 'createNull', [], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('isnull', $TYPE_OPS, 'isnull', [$RT_OBJ], $RT_INT);
 QAST::OperationsJAST.map_classlib_core_op('isnull_s', $TYPE_OPS, 'isnull_s', [$RT_STR], $RT_INT);
 QAST::OperationsJAST.map_classlib_core_op('istrue', $TYPE_OPS, 'istrue', [$RT_OBJ], $RT_INT, :tc);
@@ -2704,7 +2687,7 @@ QAST::OperationsJAST.map_classlib_core_op('iscont_s', $TYPE_OPS, 'iscont_s', [$R
 QAST::OperationsJAST.map_classlib_core_op('isrwcont', $TYPE_OPS, 'isrwcont', [$RT_OBJ], $RT_INT, :tc);
 QAST::OperationsJAST.map_classlib_core_op('decont', $TYPE_OPS, 'decont', [$RT_OBJ], $RT_OBJ, :tc);
 QAST::OperationsJAST.add_core_op('wantdecont', -> $qastcomp, $op {
-    # Currently, no optimization for this on JVM backend. 
+    # Currently, no optimization for this on JVM backend.
     $qastcomp.as_jast($op[0])
 });
 QAST::OperationsJAST.map_classlib_core_op('decont_i', $TYPE_OPS, 'decont_i', [$RT_OBJ], $RT_INT, :tc);
@@ -2797,6 +2780,40 @@ QAST::OperationsJAST.add_core_op('cleardispatcher', -> $qastcomp, $op {
     $il.append($ACONST_NULL);
     result($il, $RT_OBJ);
 });
+QAST::OperationsJAST.map_classlib_core_op('nextdispatcherfor', $TYPE_OPS, 'nextdispatcherfor', [$RT_OBJ, $RT_OBJ], $RT_OBJ, :tc);
+QAST::OperationsJAST.add_core_op('takenextdispatcher', -> $qastcomp, $op {
+    if nqp::elems(@($op)) != 1 || !nqp::istype($op[0], QAST::SVal) {
+        nqp::die('takenextdispatcher requires one string literal operand');
+    }
+    my $name := $op[0].value;
+    my $idx := $*BLOCK.lexical_type($name);
+    unless nqp::defined($idx) {
+        nqp::die('takenextdispatcher used with non-existing lexical ');
+    }
+    my $il := JAST::InstructionList.new();
+    $il.append(JAST::PushIndex.new( :value($*BLOCK.lexical_idx($name)) ));
+    $il.append($ALOAD_1);
+    $il.append(JAST::Instruction.new( :op('invokestatic'),
+        $TYPE_OPS, 'takenextdispatcher', 'V', 'I', $TYPE_TC ));
+    if $*WANT != $RT_VOID {
+        $il.append($ACONST_NULL);
+        result($il, $RT_OBJ)
+    }
+    else {
+        result($il, $RT_VOID)
+    }
+});
+QAST::OperationsJAST.add_core_op('clearnextdispatcher', -> $qastcomp, $op {
+    if nqp::elems(@($op)) != 0 {
+        nqp::die('clearnextdispatcher accepts no operands');
+    }
+    my $il := JAST::InstructionList.new();
+    $il.append($ALOAD_1);
+    $il.append($ACONST_NULL);
+    $il.append(JAST::Instruction.new( :op('putfield'), $TYPE_TC, 'nextDispatcher', $TYPE_SMO ));
+    $il.append($ACONST_NULL);
+    result($il, $RT_OBJ);
+});
 QAST::OperationsJAST.add_core_op('setup_blv', -> $qastcomp, $op {
     if nqp::elems(@($op)) != 1 || !nqp::ishash($op[0]) {
         nqp::die('setup_blv requires one hash operand');
@@ -2846,7 +2863,6 @@ QAST::OperationsJAST.map_classlib_core_op('hllboolfor', $TYPE_OPS, 'hllboolfor',
 
 # regex engine related opcodes
 QAST::OperationsJAST.map_classlib_core_op('nfafromstatelist', $TYPE_OPS, 'nfafromstatelist', [$RT_OBJ, $RT_OBJ], $RT_OBJ, :tc);
-QAST::OperationsJAST.map_classlib_core_op('nfatostatelist', $TYPE_OPS, 'nfatostatelist', [$RT_OBJ], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('nfarunproto', $TYPE_OPS, 'nfarunproto', [$RT_OBJ, $RT_STR, $RT_INT], $RT_OBJ, :tc);
 QAST::OperationsJAST.map_classlib_core_op('nfarunalt', $TYPE_OPS, 'nfarunalt', [$RT_OBJ, $RT_STR, $RT_INT, $RT_OBJ, $RT_OBJ, $RT_OBJ], $RT_OBJ, :tc);
 
@@ -2858,6 +2874,7 @@ QAST::OperationsJAST.map_classlib_core_op('getenvhash', $TYPE_OPS, 'getenvhash',
 QAST::OperationsJAST.map_classlib_core_op('getpid', $TYPE_OPS, 'getpid', [], $RT_INT, :tc);
 QAST::OperationsJAST.map_classlib_core_op('getppid', $TYPE_OPS, 'getppid', [], $RT_INT, :tc);
 QAST::OperationsJAST.map_classlib_core_op('jvmgetproperties', $TYPE_OPS, 'jvmgetproperties', [], $RT_OBJ, :tc);
+QAST::OperationsJAST.map_classlib_core_op('execname', $TYPE_OPS, 'execname', [], $RT_STR, :tc);
 QAST::OperationsJAST.map_classlib_core_op('getrusage', $TYPE_OPS, 'getrusage', [$RT_OBJ], $RT_OBJ, :tc);
 
 # thread related opcodes
@@ -3312,7 +3329,7 @@ class QAST::CompilerJAST {
         my $file := nqp::ifnull(nqp::getlexdyn('$?FILES'), "");
         my $*JCLASS := JAST::Class.new(
             :name($classname),
-            :super('org.perl6.nqp.runtime.CompilationUnit'),
+            :super('org.raku.nqp.runtime.CompilationUnit'),
             :filename($file)
         );
 
@@ -4360,7 +4377,11 @@ class QAST::CompilerJAST {
 
             my $lbl := JAST::Label.new(:name($node.unique('fallback')));
             $il.append($DUP);
-            $il.append(JAST::Instruction.new( :op('ifnonnull'), $lbl ));
+            $il.append(JAST::Instruction.new( :op('invokestatic'),
+                $TYPE_OPS, 'isnull', 'Long', $TYPE_SMO));
+            $il.append($IVAL_ZERO);
+            $il.append($LCMP);
+            $il.append(JAST::Instruction.new( :op('ifeq'), $lbl ));
 
             my $fallback_res := self.as_jast($node.fallback, :want($RT_OBJ));
             $il.append($POP);
@@ -4897,7 +4918,7 @@ class QAST::CompilerJAST {
         $il.append($ALOAD_1);
         $il.append(JAST::InvokeDynamic.new(
             'wval_noa', $TYPE_SMO, [$TYPE_STR, 'I', $TYPE_TC],
-            'org/perl6/nqp/runtime/IndyBootstrap', 'wval_noa'
+            'org/raku/nqp/runtime/IndyBootstrap', 'wval_noa'
         ));
         result($il, $RT_OBJ);
     }
@@ -5252,7 +5273,11 @@ class QAST::CompilerJAST {
 
         # Backtrack the cursor stack.
         $il.append(JAST::Instruction.new( :op('aload'), %*REG<cstack> ));
-        $il.append(JAST::Instruction.new( :op('ifnull'), $jumplabel ));
+        $il.append(JAST::Instruction.new( :op('invokestatic'),
+            $TYPE_OPS, 'isnull', 'Long', $TYPE_SMO));
+        $il.append($IVAL_ONE);
+        $il.append($LCMP);
+        $il.append(JAST::Instruction.new( :op('ifeq'), $jumplabel ));
         $il.append(JAST::Instruction.new( :op('aload'), %*REG<cstack> ));
         $il.append($ALOAD_1);
         $il.append(JAST::Instruction.new( :op('invokestatic'), $TYPE_OPS,

@@ -46,7 +46,8 @@ grammar HLL::Grammar {
 #?endif
     ;
 
-    method perl() { self.HOW.name(self) ~ '.new() #`[' ~ nqp::where(self) ~ ']' }
+    method perl() { self.raku }
+    method raku() { self.HOW.name(self) ~ '.new() #`[' ~ nqp::where(self) ~ ']' }
 
     method throw_unrecog_backslash_seq ($sequence) {
         self.panic("Unrecognized backslash sequence: '\\" ~ $sequence ~ "'");
@@ -166,7 +167,7 @@ grammar HLL::Grammar {
         | '[' <charnames> ']'
         | \d+ [ _ \d+]*
         | <control=[ ?..Z ]>
-        | <.panic: 'Unrecognized \\c character'>
+        | <.panic: 'Unrecognized \\c character' >
         ]
     }
 
@@ -223,13 +224,20 @@ of the match.
         @args.push(HLL::Compiler.lineof($target, $pos) + 1);
         @args.push(', near "');
         @args.push(nqp::escape(nqp::substr($target, $pos, 10)));
-        @args.push('"');
         nqp::die(join('', @args))
     }
 
-    method FAILGOAL($goal, $dba?) {
+    method FAILGOAL($Goal, $dba?) {
         unless $dba {
             $dba := nqp::getcodename(nqp::callercode());
+        }
+        # TODO: make this amenable to handling various specific failure messages
+        #   the immediate problem is panics with space before closing '>'
+        # one thing to try is to test $goal for key words
+        my $goal := $Goal;
+        my $rx := /'>'/;
+        if $goal ~~ $rx {
+            $goal := nqp::concat($goal, "\n'<.panic()>' cannot have whitespace outside '()'");
         }
         self.panic("Unable to parse expression in $dba; couldn't find final $goal");
     }
@@ -404,7 +412,7 @@ An operator precedence parser.
             $pos := nqp::getattr_i($termcur, NQPMatch, '$!pos');
             nqp::bindattr_i($here, NQPMatch, '$!pos', $pos);
             if $pos < 0 {
-                $here.panic('Missing required term after infix') if @opstack;
+                $here.panic('Missing required term after infix') if nqp::elems(@opstack);
                 return $here;
             }
 
@@ -418,7 +426,7 @@ An operator precedence parser.
             @postfixish := nqp::atkey(%termOPER, 'postfixish');
 
             unless nqp::isnull(@prefixish) || nqp::isnull(@postfixish) {
-                while @prefixish && @postfixish {
+                while nqp::elems(@prefixish) && nqp::elems(@postfixish) {
                     my %preO     := @prefixish[0]<OPER><O>.made;
                     my %postO    := @postfixish[nqp::elems(@postfixish)-1]<OPER><O>.made;
                     my $preprec  := nqp::ifnull(nqp::atkey(%preO, 'sub'), nqp::ifnull(nqp::atkey(%preO, 'prec'), ''));
@@ -440,8 +448,8 @@ An operator precedence parser.
                         self.EXPR_nonassoc($here, ~@prefixish[0], ~@postfixish[0]);
                     }
                 }
-                nqp::push(@opstack, nqp::shift(@prefixish)) while @prefixish;
-                nqp::push(@opstack, nqp::pop(@postfixish)) while @postfixish;
+                nqp::push(@opstack, nqp::shift(@prefixish)) while nqp::elems(@prefixish);
+                nqp::push(@opstack, nqp::pop(@postfixish)) while nqp::elems(@postfixish);
             }
             nqp::deletekey($termish, 'prefixish');
             nqp::deletekey($termish, 'postfixish');
@@ -483,8 +491,8 @@ An operator precedence parser.
                     last;
                 }
 
-                while @opstack {
-                    my %opO := @opstack[+@opstack-1]<OPER><O>.made;
+                while nqp::elems(@opstack) {
+                    my %opO := @opstack[nqp::elems(@opstack)-1]<OPER><O>.made;
 
                     $opprec := nqp::ifnull(nqp::atkey(%opO, 'sub'), nqp::atkey(%opO, 'prec'));
                     last unless $opprec gt $inprec;
@@ -509,7 +517,7 @@ An operator precedence parser.
                         @opstack[nqp::elems(@opstack)-1]<OPER>.Str,
                         $infix.Str());
                 }
-                elsif $inassoc eq 'left' {
+                elsif $inassoc eq 'left' || $inassoc eq 'chain' {
                     # left associative, reduce immediately
                     self.EXPR_reduce(@termstack, @opstack);
                 }
@@ -528,7 +536,7 @@ An operator precedence parser.
             return $here if $pos < 0;
         }
 
-        self.EXPR_reduce(@termstack, @opstack) while @opstack;
+        self.EXPR_reduce(@termstack, @opstack) while nqp::elems(@opstack);
 
 	    self.'!clone_match_at'(
 	        nqp::pop(@termstack),

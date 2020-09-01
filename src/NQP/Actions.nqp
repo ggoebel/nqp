@@ -278,7 +278,7 @@ class NQP::Actions is HLL::Actions {
     }
 
     method statement_control:sym<if>($/) {
-        my $count := +$<xblock> - 1;
+        my $count := nqp::elems($<xblock>) - 1;
         my $ast := xblock_immediate( $<xblock>[$count].ast );
         if $<else> {
             $ast.push( block_immediate( $<else>.ast ) );
@@ -723,6 +723,7 @@ class NQP::Actions is HLL::Actions {
     method scope_declarator:sym<my>($/)  { make $<scoped>.ast; $/.prune }
     method scope_declarator:sym<our>($/) { make $<scoped>.ast; $/.prune }
     method scope_declarator:sym<has>($/) { make $<scoped>.ast; $/.prune }
+    method scope_declarator:sym<anon>($/) { make $<scoped>.ast; $/.prune }
 
     method scoped($/) {
         make $<declarator>         ?? $<declarator>.ast !!
@@ -846,17 +847,19 @@ class NQP::Actions is HLL::Actions {
 
     method constant_declarator($/) {
         my $sym := ~$<identifier>;
-        my $type := $<typename>.ast.value;
+        my $value := $<typename>
+            ?? $<typename>.ast.value
+            !! $*W.evaluate_constant($<EXPR>.ast);
         if $*SCOPE eq 'my' || $*SCOPE eq 'our' {
-            $*W.install_lexical_symbol($*W.cur_lexpad(), $sym, $type);
+            $*W.install_lexical_symbol($*W.cur_lexpad(), $sym, $value);
             if $*SCOPE eq 'our' {
-                $*W.install_package_symbol($*PACKAGE, [$sym], $type);
+                $*W.install_package_symbol($*PACKAGE, [$sym], $value);
             }
         }
         else {
             $/.panic("Cannot have a $*SCOPE scoped constant");
         }
-        make QAST::WVal.new( :value($type) );
+        make QAST::WVal.new( :$value );
     }
 
     method routine_declarator:sym<sub>($/) { make $<routine_def>.ast; $/.prune }
@@ -987,6 +990,11 @@ class NQP::Actions is HLL::Actions {
                     }
                 }
                 $ast := QAST::Var.new( :name('&' ~ $name), :scope('lexical') );
+            }
+            elsif $*SCOPE eq 'anon' {
+                if $*W.is_precompilation_mode() {
+                    $*W.create_code($ast, $name, 0);
+                }
             }
             else {
                 $/.panic("$*SCOPE scoped routines are not supported yet");
@@ -1497,7 +1505,7 @@ class NQP::Actions is HLL::Actions {
             else { $ast.push($expr); }
         }
         my $i := 0;
-        my $n := +$ast.list;
+        my $n := nqp::elems($ast.list);
         while $i < $n {
             if nqp::istype($ast[$i], QAST::Op) && $ast[$i].name eq '&prefix:<|>' {
                 $ast[$i] := $ast[$i][0];
@@ -1929,14 +1937,6 @@ class NQP::RegexActions is QRegex::P6Regex::Actions {
 
     method store_regex_caps($code_obj, $block, %caps) {
         $code_obj.SET_CAPS(%caps);
-    }
-
-    method store_regex_alt_nfa($code_obj, $block, $key, @alternatives) {
-        my @saved;
-        for @alternatives {
-            @saved.push($_.save(:non_empty));
-        }
-        $code_obj.SET_ALT_NFA($key, @saved);
     }
 
     method set_cursor_type($qast) {

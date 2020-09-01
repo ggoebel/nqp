@@ -1,11 +1,11 @@
-## Please see file perltidy.ERR
 package NQP::Config::NQP;
 use v5.10.1;
 use strict;
 use warnings;
 use Cwd;
 use IPC::Cmd qw<run>;
-use NQP::Config qw<slurp read_config_from_command cmp_rev system_or_die run_or_die>;
+use NQP::Config qw<slurp read_config_from_command cmp_rev system_or_die
+  run_or_die>;
 
 use base qw<NQP::Config>;
 
@@ -48,7 +48,8 @@ sub configure_backends {
 }
 
 sub configure_refine_vars {
-    my $self = shift;
+    my $self   = shift;
+    my $config = $self->{config};
 
     unless ( $self->cfg('prefix') ) {
         my $moar_conf   = $self->moar_config;
@@ -66,10 +67,20 @@ sub configure_refine_vars {
     }
 
     $self->SUPER::configure_refine_vars(@_);
+
+    $config->{nqp_home} = $self->nfp(
+        File::Spec->rel2abs(
+            $config->{nqp_home}
+              || File::Spec->catdir( $config->{'prefix'}, 'share', 'nqp' )
+        )
+    );
+
+    $config->{static_nqp_home} = $config->{relocatable} eq 'reloc' ? '' : $config->{nqp_home};
 }
 
 sub configure_misc {
     my $self   = shift;
+    $self->SUPER::configure_misc(@_);
     my $config = $self->{config};
 
     if ( $self->active_backend('moar') ) {
@@ -84,22 +95,11 @@ sub configure_misc {
 
     $config->{moar_stage0} = $self->nfp( "src/vm/moar/stage0", no_quote => 1 );
     $config->{jvm_stage0}  = $self->nfp( "src/vm/jvm/stage0",  no_quote => 1 );
-
-    if ( !$config->{nqplibdir} ) {
-        $config->{nqplibdir} = $self->nfp(
-            (
-                  $self->opt('libdir')
-                ? $self->opt('libdir') . "/nqp"
-                : '$(NQP_HOME)/lib'
-            ),
-            no_quote => 1,
-        );
-    }
 }
 
 sub configure_moar_backend {
-    my $self  = shift;
-    my $imoar = $self->{impls}{moar};
+    my $self   = shift;
+    my $imoar  = $self->{impls}{moar};
     my $config = $self->{config};
 
     $self->gen_moar;
@@ -117,19 +117,19 @@ sub configure_moar_backend {
     }
     else {
         my $qchar = $config->{quote};
-        $imoar->{config}{static_nqp_home} =
-          File::Spec->rel2abs(
-            File::Spec->catdir( $config->{'prefix'}, 'share', 'nqp' )
-          );
+        $imoar->{config}{static_nqp_home} = $config->{static_nqp_home};
         $imoar->{config}{static_nqp_home_define} =
-          '-DSTATIC_NQP_HOME='
-          . $qchar . $self->c_escape_string( $imoar->{config}{static_nqp_home} ) . $qchar;
+            '-DSTATIC_NQP_HOME='
+          . $qchar
+          . $self->c_escape_string( $imoar->{config}{static_nqp_home} )
+          . $qchar;
     }
 
     # Strip rpath from ldflags so we can set it differently ourself.
     $imoar->{config}{ldflags} = $moar_config->{'moar::ldflags'};
     $imoar->{config}{ldflags} =~ s/\Q$moar_config->{'moar::ldrpath'}\E ?//;
-    $imoar->{config}{ldflags} =~ s/\Q$moar_config->{'moar::ldrpath_relocatable'}\E ?//;
+    $imoar->{config}{ldflags} =~
+      s/\Q$moar_config->{'moar::ldrpath_relocatable'}\E ?//;
     if ( $self->cfg('prefix') ne '/usr' ) {
         $imoar->{config}{ldflags} .= ' '
           . (
@@ -152,7 +152,8 @@ sub configure_moar_backend {
         if ( $moar_config->{'moar::os'} eq 'mingw32' ) {
             $imoar->{config}{mingw_unicode} = '-municode';
         }
-        push @c_runner_libs, sprintf( $moar_config->{'moar::ldusr'}, 'Shlwapi' );
+        push @c_runner_libs,
+          sprintf( $moar_config->{'moar::ldusr'}, 'Shlwapi' );
     }
     $imoar->{config}{c_runner_libs} = join( " ", @c_runner_libs );
     $imoar->{config}{moar_lib}      = sprintf(
@@ -217,7 +218,7 @@ sub configure_jvm_backend {
         print "got: $_";
         if (/(?:java|jdk) version "(\d+)(?:\.(\d+))?/) {
             $jvm_found = 1;
-            if ( $1 > 1 || $1 == 1 && $2 >= 8 ) {
+            if ( $1 > 1 || $1 == 1 && $2 >= 9 ) {
                 $ijvm->{ok} = $jvm_ok = 1;
             }
             $got = $_;
@@ -229,13 +230,26 @@ sub configure_jvm_backend {
         push @errors, "No JVM (java executable) in path; cannot continue";
     }
     elsif ( !$jvm_ok ) {
-        push @errors, "Need at least JVM 1.8 (got $got)";
+        push @errors, "Need at least JVM 1.9 (got $got)";
     }
     $self->sorry(@errors) if @errors;
 
     print "Using $got\n";
 
     $j_config->{'runner'} = $self->batch_file('nqp');
+}
+
+sub configure_jars {
+    my $self    = shift;
+
+    $self->SUPER::configure_jars(
+        {
+            asm => [qw<3rdparty asm asm-4.1.jar>],
+            'asm-tree' => [qw<3rdparty asm asm-tree-4.1.jar>],
+            jline => [qw<3rdparty jline jline-1.0.jar>],
+            jna => [qw<3rdparty jna jna-4.0.0.jar>],
+        }
+    );
 }
 
 sub post_active_backends {
@@ -255,12 +269,12 @@ sub moar_config {
 
     return $moar_config if $moar_config && keys %{$moar_config} > 2;
 
-    my $prefix   = $self->cfg('prefix');
+    my $prefix = $self->cfg('prefix');
     my $moar_prefix;
     my $moar_exe;
 
     if ( $self->opt('with-moar') ) {
-        $moar_exe = File::Spec->rel2abs($self->opt('with-moar'));
+        $moar_exe = File::Spec->rel2abs( $self->opt('with-moar') );
     }
     else {
         if ($prefix) {
@@ -283,13 +297,16 @@ sub moar_config {
     }
 
     my %c;
-    if ( $self->is_executable($self->nfp($moar_exe)) ) {
-        %c = read_config_from_command(
-            '"' . $self->nfp( $moar_exe ) . '"'
-            . ' --libpath=' . $self->nfp( 'src/vm/moar/stage0' ) . ' '
-            . $self->nfp( 'src/vm/moar/stage0/nqp.moarvm' )
-            . ' --bootstrap --show-config' );
-        %c = map { rindex($_, 'moar::', 0) == 0 ? ($_ => $c{$_}) : () } keys %c;
+    if ( $self->is_executable( $self->nfp($moar_exe) ) ) {
+        %c =
+          read_config_from_command( '"'
+              . $self->nfp($moar_exe) . '"'
+              . ' --libpath='
+              . $self->nfp('src/vm/moar/stage0') . ' '
+              . $self->nfp('src/vm/moar/stage0/nqp.moarvm')
+              . ' --bootstrap --show-config' );
+        %c = map { rindex( $_, 'moar::', 0 ) == 0 ? ( $_ => $c{$_} ) : () }
+          keys %c;
     }
 
     return $self->backend_config( 'moar',
@@ -308,17 +325,27 @@ sub gen_moar {
     my $moar_have;
     my @errors;
 
-    my $prefix   = $config->{prefix};
-    my $gen_moar = $options->{'gen-moar'};
-    my $has_gen_moar = defined $gen_moar;
-    my @opts     = @{ $options->{'moar-option'} || [] };
+    my $prefix        = $config->{prefix};
+    my $gen_moar      = $options->{'gen-moar'};
+    my $force_rebuild = $options->{'force-rebuild'};
+    my $has_gen_moar  = defined $gen_moar;
+    my @opts          = @{ $options->{'moar-option'} || [] };
     push @opts, "--optimize";
     push @opts, '--relocatable' if $options->{relocatable};
+    push @opts,
+        '--git-cache-dir=' . File::Spec->rel2abs($options->{'git-cache-dir'})
+        if $options->{'git-cache-dir'};
     my $startdir     = $config->{base_dir};
     my $git_protocol = $options->{'git-protocol'} || 'https';
     my $try_generate;
     my $moar_exe            = $self->moar_config->{moar};
     my $moar_version_output = "";
+
+    if ( $force_rebuild && !$has_gen_moar ) {
+        $self->note( "WARNING",
+"Command line option --force-rebuild is ineffective without --gen-moar"
+        );
+    }
 
     if ( $self->is_executable($moar_exe) ) {
         $moar_version_output = run_or_die( [ $moar_exe, '--version' ] );
@@ -331,37 +358,49 @@ sub gen_moar {
         $try_generate = $has_gen_moar;
     }
 
-    my $moar_ok =
-      $moar_have && cmp_rev( $moar_have, $moar_want, "MoarVM" ) >= 0;
-    if ($moar_ok) {
-        $self->msg(
-            "Found $moar_exe version $moar_have, which is new enough.\n");
-    }
-    elsif ($moar_have) {
-        push @errors,
-"Found $moar_exe version $moar_have, which is too old. Wanted at least $moar_want\n";
-        $try_generate = $has_gen_moar unless $options->{'ignore-errors'};
-    }
-    elsif ($moar_version_output
-        && $moar_version_output =~ /This is MoarVM version/i )
-    {
-        push @errors,
-          "Found a MoarVM binary but was not able to get its version number.\n"
-          . "If running `git describe` inside the MoarVM repository does not work,\n"
-          . "you need to make sure to checkout tags of the repository and run \nConfigure.pl and make install again\n";
-        $try_generate = $has_gen_moar;
+    unless ($force_rebuild) {
+        my $moar_ok =
+          $moar_have && cmp_rev( $moar_have, $moar_want, "MoarVM" ) >= 0;
+        if ($moar_ok) {
+            $self->msg(
+                "Found $moar_exe version $moar_have, which is new enough.\n");
+        }
+        elsif ($moar_have) {
+            push @errors,
+              "Found $moar_exe version $moar_have, which is too old. "
+              . "Wanted at least $moar_want\n";
+            $try_generate = $has_gen_moar unless $options->{'ignore-errors'};
+        }
+        elsif ($moar_version_output
+            && $moar_version_output =~ /This is MoarVM version/i )
+        {
+            push @errors,
+                "Found a MoarVM binary "
+              . " but was not able to get its version number.\n"
+              . "If running `git describe` inside the MoarVM repository does not work,\n"
+              . "you need to make sure to checkout tags of the repository and run \n"
+              . "Configure.pl and make install again\n";
+            $try_generate = $has_gen_moar;
+        }
     }
 
     if (@errors) {
         if ($try_generate) {
-            $self->note("ATTENTION!", $_) foreach @errors;
+            $self->note( "ATTENTION!", $_ ) foreach @errors;
         }
         else {
             $self->sorry(@errors);
         }
     }
 
-    if ( $try_generate ) {
+    if ( $try_generate || ( $has_gen_moar && $force_rebuild ) ) {
+
+        # Don't expect any particular commit in MoarVM/ if the repo is already
+        # checked out.
+        my $expected_spec =
+          -d File::Spec->catdir( $self->cfg('base_dir'), 'MoarVM', '.git' )
+          ? undef
+          : $moar_want;
 
         my $moar_repo =
           $self->git_checkout( 'moar', 'MoarVM', $gen_moar || $moar_want );
@@ -415,6 +454,97 @@ sub probe_node {
     }
     return;
 }
+
+package NQP::Macros::NQP;
+use strict;
+use warnings;
+
+sub _m_for_stages {
+    my $self = shift;
+    my $text = shift;
+
+    my $out  = "";
+    my $bpfx = $self->cfg->cfg('backend_prefix');
+    foreach my $stage ( 1 .. 2 ) {
+        my $prev_stage = $stage - 1;
+        my $lc_stage   = "stage$stage";
+        my $lc_prev    = "stage$prev_stage";
+        my %config     = (
+            stage          => $stage,
+            ucstage        => uc($lc_stage),
+            lcstage        => $lc_stage,
+            prev_stage     => $prev_stage,
+            ucprev_stage   => uc($lc_prev),
+            lcprev_stage   => $lc_prev,
+            stage_dir      => '$(' . uc($bpfx) . "_STAGE${stage}_DIR)",
+            prev_stage_dir => '$(' . uc($bpfx) . "_STAGE${prev_stage}_DIR)",
+        );
+        my $stage_ctx = {
+            stage   => $stage,
+            configs => [ \%config ],
+        };
+        my $s = $self->cfg->push_ctx($stage_ctx);
+        $out .= $self->_expand($text);
+    }
+
+    return $out;
+}
+
+sub _m_stage_gencat {
+    my $self = shift;
+    my $text = shift;
+    return $self->expand(<<TPL);
+$text
+\t\@echo(+++ Generating\t\$\@)@
+\t\$(NOECHO)\@bpm(\@ucstage\@_GEN_CAT)\@ \@prereqs\@ > \$\@
+TPL
+}
+
+sub _m_stage_precomp {
+    my $self = shift;
+    my $text = shift;
+    $self->set_in_receipe( 'nqp_setting', 'NQPCORE' );
+    $self->set_in_receipe( 'setting_path_param',
+        ' --setting-path=@stage_dir@' );
+    $self->set_in_receipe( 'module_path_param', ' --module-path=@stage_dir@' );
+    return $self->expand(<<TPL);
+$text
+\t\@echo(+++ Compiling\t\$\@)@
+\t\$(NOECHO)\@bpm(STAGE\@prev_stage\@_NQP)\@\@expand(\@setting_path_param\@\@module_path_param\@)\@ --no-regex-lib --target=\@btarget\@ --setting=\@nqp_setting\@ \@bpm(PRECOMP_\@ucstage\@_FLAGS)\@ --output=\$\@ \@prereqs\@
+TPL
+}
+
+# Set nqp_setting variable for precomp receipe
+sub _m_setting {
+    my $self = shift;
+    my $text = shift;
+    $self->set_in_receipe( 'nqp_setting', $text );
+    if ( $self->expand($text) eq 'NULL' ) {
+        $self->set_in_receipe( 'setting_path_param', '' );
+    }
+    return "";
+}
+
+# Set module_path_param variable for precomp receipe
+sub _m_no_module_path {
+    my $self = shift;
+    $self->set_in_receipe( 'module_path_param', '' );
+    return "";
+}
+
+NQP::Macros->register_macro(
+    'stage_gencat', \&_m_stage_gencat,
+    in_receipe => 1,
+    preexapnd  => 0,
+);
+NQP::Macros->register_macro(
+    'stage_precomp', \&_m_stage_precomp,
+    in_receipe => 1,
+    preexpand  => 0,
+);
+NQP::Macros->register_macro( 'for_stages', \&_m_for_stages, preexapnd => 0 );
+NQP::Macros->register_macro( 'setting',    \&_m_setting,    preexapnd => 1 );
+NQP::Macros->register_macro( 'no_module_path', \&_m_no_module_path );
 
 1;
 

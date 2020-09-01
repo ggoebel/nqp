@@ -8,7 +8,6 @@ class HLL::Compiler does HLL::Backend::Default {
     has @!cmdoptions;
     has $!compiler_progname;
     has $!language;
-    has %!config;
     has $!user_progname;
     has @!cli-arguments;
     has %!cli-options;
@@ -31,7 +30,6 @@ class HLL::Compiler does HLL::Backend::Default {
         ~ ' confprog=s'
 #?endif
         );
-        %!config     := nqp::hash();
     }
 
     method backend(*@value) {
@@ -54,7 +52,7 @@ class HLL::Compiler does HLL::Backend::Default {
         nqp::getcomp($name);
     }
 
-    method config() { %!config };
+    method config() { nqp::gethllsym('default', 'SysConfig').nqp-build-config }
 
     method autoprint($value) {
         self.interactive_result($value)
@@ -322,7 +320,7 @@ class HLL::Compiler does HLL::Backend::Default {
                         self.dumper($result, $target, |%adverbs);
                     }
                 }
-                elsif !@a {
+                elsif !@a || (@a == 1 && @a[0] eq '-')  {
                     # Is STDIN a TTY display? If so, start the REPL, otherwise, simply
                     # assume the program to eval is given on STDIN.
                     my $force := %adverbs<repl-mode>//'';
@@ -565,6 +563,7 @@ class HLL::Compiler does HLL::Backend::Default {
     }
 
     method execute_stage($stage, $result, %adverbs) {
+        %adverbs := %adverbs.FLATTENABLE_HASH unless nqp::ishash(%adverbs);
         if nqp::can($!backend, $stage) {
             $!backend."$stage"($result, |%adverbs);
         }
@@ -577,7 +576,8 @@ class HLL::Compiler does HLL::Backend::Default {
     }
 
     method compile($source, :$from, :$lineposcache, *%adverbs) {
-        my %*COMPILING<%?OPTIONS> := %adverbs;
+        my %*COMPILING := nqp::clone(nqp::ifnull(nqp::getlexdyn('%*COMPILING'), nqp::hash()));
+        %*COMPILING<%?OPTIONS> := %adverbs;
         my $*LINEPOSCACHE := $lineposcache;
 
         my $target := nqp::lc(%adverbs<target>);
@@ -591,13 +591,14 @@ class HLL::Compiler does HLL::Backend::Default {
         unless $target eq '' || self.exists_stage($target) {
             nqp::die("Unknown compilation target '$target'");
         }
-        for self.stages() {
-            if $from ne '' {
-                if $_ eq $from {
-                    $from := '';
-                }
-                next;
-            }
+
+        my @stages := nqp::clone(self.stages());
+        if $from ne '' {
+            while nqp::shift(@stages) ne $from { }
+            nqp::unshift(@stages, 'start');
+        }
+
+        for @stages {
             $stderr.print(nqp::sprintf("Stage %-11s: ", [$_])) if nqp::defined($stagestats) && $_ ne "parse";
             my num $timestamp := nqp::time_n();
 
@@ -698,7 +699,7 @@ class HLL::Compiler does HLL::Backend::Default {
     }
 
     method version() {
-        my $version        := %!config<version>;
+        my $version        := self.config()<version>;
         my $backver        := $!backend.version_string();
         my $implementation := self.implementation();
         my $language_name  := self.language_name();
@@ -722,8 +723,9 @@ class HLL::Compiler does HLL::Backend::Default {
         for sorted_keys($!backend.config) -> $key {
             nqp::say($bname ~ '::' ~ $key ~ '=' ~ $!backend.config{$key});
         }
-        for sorted_keys(%!config) -> $key {
-            nqp::say($!language ~ '::' ~ $key ~ '=' ~ %!config{$key});
+        my %config := self.config();
+        for sorted_keys(%config) -> $key {
+            nqp::say($!language ~ '::' ~ $key ~ '=' ~ %config{$key});
         }
         nqp::exit(0);
     }
@@ -858,16 +860,19 @@ class HLL::Compiler does HLL::Backend::Default {
     method linefileof($target, int $pos, int :$cache = 0, int :$directives = 0) {
         my int $line := nqp::atpos_i(self.line_and_column_of($target, $pos, :$cache), 0);
         my str $file := '';
-        if $directives && (my @clds := @*comp_line_directives) {
+        if $directives {
+            my @clds := @*comp_line_directives;
             my int $i := nqp::elems(@clds);
-            while $i > 0 {
-                $i := $i - 1;
-                last if $line > @clds[$i][0];
-            }
-            if $line > @clds[$i][0] {
-                my @directive := @clds[$i];
-                $line := $line - @directive[0] + @directive[1] - 1;
-                $file := @directive[2];
+            if $i {
+                while $i > 0 {
+                    $i := $i - 1;
+                    last if $line > @clds[$i][0];
+                }
+                if $line > @clds[$i][0] {
+                    my @directive := @clds[$i];
+                    $line := $line - @directive[0] + @directive[1] - 1;
+                    $file := @directive[2];
+                }
             }
         }
         [$line, $file];
@@ -912,3 +917,5 @@ class HLL::Compiler does HLL::Backend::Default {
 
 my $compiler := HLL::Compiler.new();
 $compiler.language($compiler.backend.name);
+nqp::bindcomp('default', $compiler);
+nqp::bindhllsym('default', 'SysConfig', HLL::SysConfig.new());

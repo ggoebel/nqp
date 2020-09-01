@@ -490,6 +490,7 @@ grammar NQP::Grammar is HLL::Grammar {
     }
 
     proto rule scope_declarator { <...> }
+    rule scope_declarator:sym<anon> { <sym> <scoped('anon')> }
     rule scope_declarator:sym<my>  { <sym> <scoped('my')> }
     rule scope_declarator:sym<our> { <sym> <scoped('our')> }
     rule scope_declarator:sym<has> { <sym> <scoped('has')> }
@@ -523,8 +524,8 @@ grammar NQP::Grammar is HLL::Grammar {
     token constant_declarator {
         'constant' <.ws> <identifier> <.ws> ':=' <.ws>
         [
-        || <typename>
-        || <.panic: 'Only typename on RHS of constant implemented so far'>
+        || <typename> <?before <.ws> ';'>
+        || <EXPR>
         ]
     }
 

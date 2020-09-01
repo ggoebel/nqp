@@ -170,7 +170,8 @@ class NQP::Optimizer {
     my %opt_n_i := nqp::hash('add', 1, 'sub', 1, 'mul', 1, 'mod', 1, 'neg', 1, 'abs', 1, 'iseq', 1, 'isne', 1,
                              'islt', 1, 'isle', 1, 'isgt', 1, 'isge', 1, 'cmp', 1);
 
-    my %op_poisons_lowering := nqp::hash('ctx', 1, 'curlexpad', 1, 'takedispatcher', 1, 'getlexouter', 1);
+    my %op_poisons_lowering := nqp::hash('ctx', 1, 'curlexpad', 1, 'takedispatcher', 1, 'takenextdispatcher', 1,
+                                         'getlexouter', 1);
 
     method visit_op($op) {
         # Handle op needs special handling.
@@ -260,8 +261,19 @@ class NQP::Optimizer {
             !! "";
         my int $und := nqp::index($opname, '_');
         my str $asm := $und > 0 ?? nqp::substr($opname, 0, $und) !! '';
-        if $typeinfo eq '_n' && nqp::existskey(%opt_n_i, $asm) {
-            self.num_to_int($op, $asm);
+        # Enrich various ops with int/num/str annotations.
+        if $typeinfo eq '_n' {
+            if nqp::existskey(%opt_n_i, $asm) {
+                self.num_to_int($op, $asm);
+            }
+            else {
+                $op.returns(num);
+            }
+        }
+        elsif $typeinfo eq '_i' {
+            $op.returns(int);
+        } elsif $typeinfo eq '_s' {
+            $op.returns(str);
         }
 
         # Calls to fixed names that are compile-time known can be simplified.
@@ -280,21 +292,19 @@ class NQP::Optimizer {
             }
         }
 
-        # Enrich various ops with int/num/str annotations.
-        elsif $typeinfo eq '_i' {
-            $op.returns(int);
-        } elsif $typeinfo eq '_s' {
-            $op.returns(str);
-        }
-        if $opname eq 'numify' {
-            # if we can establish that the argument is a list, we are good
-            # to claim it returns an int.
+        elsif $opname eq 'intify' {
+            # if we can establish that the argument is a list or hash, re-write
+            # to nqp::elems()
             if nqp::istype($op[0], QAST::Var) {
                 my $sigil := nqp::substr($op[0].name, 0, 1);
                 if $sigil eq '@' || $sigil eq '%' {
-                    $op.returns(int)
+                    $op.op('elems');
                 }
             }
+            $op.returns(int)
+        }
+        elsif $opname eq 'numify' {
+            $op.returns(num)
         }
 
         $op;

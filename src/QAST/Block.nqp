@@ -13,11 +13,10 @@ class QAST::Block is QAST::Node does QAST::Children {
 
     method new(str :$name, str :$blocktype, *@children, *%options) {
         my $node := nqp::create(self);
-        nqp::bindattr_i($node, QAST::Node, '$!flags', 0);
         nqp::bindattr($node, QAST::Block, '@!children', @children);
         nqp::bindattr_s($node, QAST::Block, '$!name', $name);
         nqp::bindattr_s($node, QAST::Block, '$!blocktype', $blocktype);
-        $node.set(%options) if %options;
+        $node.set(%options) if nqp::isconcrete(%options) && nqp::elems(%options);
         $node
     }
 
@@ -41,12 +40,8 @@ class QAST::Block is QAST::Node does QAST::Children {
     }
 
     my $cur_cuid := 0;
-    method cuid($value = NO_VALUE) {
-        if !($value =:= NO_VALUE) {
-            # Set ID if we are provided one.
-            $!cuid := $value;
-        }
-        elsif $!cuid {
+    method cuid() {
+        if $!cuid {
             # If we already have an ID, return it.
             $!cuid
         }
@@ -60,7 +55,7 @@ class QAST::Block is QAST::Node does QAST::Children {
     my %NOSYMS := nqp::hash();
     method symbol(str $name, *%attrs) {
         %!symbol := nqp::hash() if nqp::isnull(%!symbol);
-        if %attrs {
+        if nqp::isconcrete(%attrs) && nqp::elems(%attrs) {
             my %syms := %!symbol{$name};
             if nqp::ishash(%syms) && nqp::elems(%syms) {
                 for %attrs {
@@ -104,6 +99,7 @@ class QAST::Block is QAST::Node does QAST::Children {
 
     method dump_extra_node_info() {
         my @extra;
+        @extra.push(":name($!name)") unless nqp::isnull_s($!name);
         @extra.push(":cuid($!cuid)") unless nqp::isnull_s($!cuid);
         @extra.push(":blocktype($!blocktype)") if nqp::chars(self.blocktype);
         nqp::join(' ', @extra);

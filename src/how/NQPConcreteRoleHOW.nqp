@@ -158,14 +158,10 @@ knowhow NQPConcreteRoleHOW {
     }
 
     method attributes($obj, :$local) {
-        my @attrs;
-        for @!attributes {
-            nqp::push(@attrs, $_);
-        }
-        @attrs
+        @!attributes
     }
 
-    method roles($obj) {
+    method roles($obj, :$transitive = 0) {
         @!roles
     }
 

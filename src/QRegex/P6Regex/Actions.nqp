@@ -18,7 +18,7 @@ class QRegex::P6Regex::Actions is HLL::Actions {
     }
     method termaltseq($/) {
         my $qast := $<termconjseq>[0].ast;
-        if +$<termconjseq> > 1 {
+        if nqp::elems($<termconjseq>) > 1 {
             $qast := QAST::Regex.new( :rxtype<altseq>, :node($/) );
             for $<termconjseq> { $qast.push($_.ast) }
         }
@@ -27,7 +27,7 @@ class QRegex::P6Regex::Actions is HLL::Actions {
 
     method termconjseq($/) {
         my $qast := $<termalt>[0].ast;
-        if +$<termalt> > 1 {
+        if nqp::elems($<termalt>) > 1 {
             $qast := QAST::Regex.new( :rxtype<conjseq>, :node($/) );
             for $<termalt> { $qast.push($_.ast); }
         }
@@ -36,7 +36,7 @@ class QRegex::P6Regex::Actions is HLL::Actions {
 
     method termalt($/) {
         my $qast := $<termconj>[0].ast;
-        if +$<termconj> > 1 {
+        if nqp::elems($<termconj>) > 1 {
             $qast := QAST::Regex.new( :rxtype<alt>, :node($/) );
             for $<termconj> { $qast.push($_.ast) }
         }
@@ -45,7 +45,7 @@ class QRegex::P6Regex::Actions is HLL::Actions {
 
     method termconj($/) {
         my $qast := $<termish>[0].ast;
-        if +$<termish> > 1 {
+        if nqp::elems($<termish>) > 1 {
             $qast := QAST::Regex.new( :rxtype<conj>, :node($/) );
             for $<termish> { $qast.push($_.ast); }
         }
@@ -552,8 +552,10 @@ class QRegex::P6Regex::Actions is HLL::Actions {
 
     method assertion:sym<method>($/) {
         my $qast := $<assertion>.ast;
-        $qast.subtype('method');
-        $qast.name('');
+        if $qast.rxtype eq 'subrule' {
+            $qast.subtype('method');
+            $qast.name('');
+        }
         make $qast;
     }
 
@@ -580,7 +582,7 @@ class QRegex::P6Regex::Actions is HLL::Actions {
             else {
                 $loc := nqp::index(%*RX<name>, ':');
                 my $angleloc := nqp::index(%*RX<name>, '<', $loc);
-		$angleloc := nqp::index(%*RX<name>, '«', $loc) if $angleloc < 0;
+                $angleloc := nqp::index(%*RX<name>, '«', $loc) if $angleloc < 0;
                 $rxname := nqp::substr(%*RX<name>, $loc + 1, $angleloc - $loc - 1) unless $loc < 0;
             }
             if $loc >= 0 {
@@ -631,11 +633,11 @@ class QRegex::P6Regex::Actions is HLL::Actions {
         my int $i := 1;
         my int $n := nqp::elems($clist);
         while $i < $n {
-	    unless ~$clist[$i]<sign> {
-		my $curse := $clist[$i]<sign>;
-		$curse."!clear_highwater"();
-		$curse.panic('Missing + or - between character class elements')
-	    }
+            unless ~$clist[$i]<sign> {
+            my $curse := $clist[$i]<sign>;
+            $curse."!clear_highwater"();
+            $curse.panic('Missing + or - between character class elements')
+        }
             my $ast := $clist[$i].ast;
             if $ast.negate || $ast.rxtype eq 'cclass' && ~$ast.node le 'Z' {
                 $ast.subtype('zerowidth');
@@ -783,7 +785,7 @@ class QRegex::P6Regex::Actions is HLL::Actions {
             @alts.push(QAST::Regex.new( $str, :rxtype<enumcharlist>, :node($/), :negate( $<sign> eq '-' ),
                                         :subtype($RXm ?? 'ignoremark' !! '') ))
                 if nqp::chars($str);
-            $qast := ( my $num := +@alts ) == 1 ?? @alts[0] !!
+            $qast := ( my $num := nqp::elems(@alts) ) == 1 ?? @alts[0] !!
                 0 < $num && $<sign> eq '-' ??
                     QAST::Regex.new( :rxtype<concat>, :node($/), :negate(1),
                         QAST::Regex.new( :rxtype<conj>, :subtype<zerowidth>, |@alts ),
@@ -843,9 +845,9 @@ class QRegex::P6Regex::Actions is HLL::Actions {
             $block.symbol('$¢', :scope<lexical>);
         }
 
-        self.store_regex_caps($code_obj, $block, capnames($qast, 0));
+        self.store_regex_caps($code_obj, $block, self.capnames($qast, 0));
         self.store_regex_nfa($code_obj, $block, QRegex::NFA.new.addnode($qast));
-        self.alt_nfas($code_obj, $block, $qast);
+        self.alt_nfas($code_obj, $qast);
 
         my $scan := QAST::Regex.new( :rxtype<scan> );
         {
@@ -888,12 +890,12 @@ class QRegex::P6Regex::Actions is HLL::Actions {
     method set_cursor_type($qast) {
     }
 
-    sub capnames($ast, int $count) {
+    method capnames($ast, int $count) {
         my %capnames;
         my $rxtype := $ast.rxtype;
         if $rxtype eq 'concat' || $rxtype eq 'goal' || $rxtype eq 'conjseq' || $rxtype eq 'conj' {
             for $ast.list {
-                my %x := capnames($_, $count);
+                my %x := self.capnames($_, $count);
                 for %x {
                     %capnames{$_.key} := nqp::add_i((%capnames{$_.key} // 0), $_.value);
                 }
@@ -903,7 +905,7 @@ class QRegex::P6Regex::Actions is HLL::Actions {
         elsif $rxtype eq 'altseq' || $rxtype eq 'alt' {
             my int $max := $count;
             for $ast.list {
-                my %x := capnames($_, $count);
+                my %x := self.capnames($_, $count);
                 for %x {
                     %capnames{$_.key} := (%capnames{$_.key} // 0) < 2 && %x{$_.key} == 1 ?? 1 !! 2;
                 }
@@ -937,19 +939,19 @@ class QRegex::P6Regex::Actions is HLL::Actions {
                     %capnames{$_} := 1;
                 }
             }
-            my %x := capnames($ast[0], $count);
+            my %x := self.capnames($ast[0], $count);
             for %x { %capnames{$_.key} := nqp::add_i((%capnames{$_.key} // 0), %x{$_.key}) }
             $count := %x{''};
         }
         elsif $rxtype eq 'quant' || $rxtype eq 'dynquant' {
             my $ilist := ($ast.subtype eq 'item');
-            my %astcap := capnames($ast[0], $count);
+            my %astcap := self.capnames($ast[0], $count);
             for %astcap { %capnames{$_.key} := $ilist ?? $_.value !! 2 }
             $count := %astcap{''};
             my $sep_ast := $ast[$rxtype eq 'quant' ?? 1 !! 2];
             if $sep_ast {
                 # handle any separator quantification
-                my %astcap := capnames($sep_ast, $count);
+                my %astcap := self.capnames($sep_ast, $count);
                 for %astcap { %capnames{$_.key} := $ilist ?? $_.value !! 2 }
                 $count := %astcap{''};
             }
@@ -958,22 +960,22 @@ class QRegex::P6Regex::Actions is HLL::Actions {
         %capnames;
     }
 
-    method alt_nfas($code_obj, $block, $ast) {
+    method alt_nfas($code_obj, $ast, $suffix = $*W.handle()) {
         my $rxtype := $ast.rxtype;
         if $rxtype eq 'alt' {
             my @alternatives;
             for $ast.list {
-                self.alt_nfas($code_obj, $block, $_);
+                self.alt_nfas($code_obj, $_, $suffix);
                 nqp::push(@alternatives, QRegex::NFA.new.addnode($_));
             }
-            $ast.name(QAST::Node.unique('alt_nfa_') ~ '_' ~ $*W.handle());
-            self.store_regex_alt_nfa($code_obj, $block, $ast.name, @alternatives);
+            $ast.name(QAST::Node.unique('alt_nfa_') ~ '_' ~ $suffix);
+            self.store_regex_alt_nfa($code_obj, $ast.name, @alternatives);
         }
         elsif $rxtype eq 'subcapture' || $rxtype eq 'quant' {
-            self.alt_nfas($code_obj, $block, $ast[0])
+            self.alt_nfas($code_obj, $ast[0], $suffix)
         }
         elsif $rxtype eq 'concat' || $rxtype eq 'altseq' || $rxtype eq 'conj' || $rxtype eq 'conjseq' {
-            for $ast.list { self.alt_nfas($code_obj, $block, $_) }
+            for $ast.list { self.alt_nfas($code_obj, $_, $suffix) }
         }
     }
 
@@ -1059,7 +1061,7 @@ class QRegex::P6Regex::Actions is HLL::Actions {
     }
 
     # Stores the NFA for a regex alternation.
-    method store_regex_alt_nfa($code_obj, $block, $key, @alternatives) {
+    method store_regex_alt_nfa($code_obj, $key, @alternatives) {
         my @saved;
         for @alternatives {
             @saved.push($_.save(:non_empty));

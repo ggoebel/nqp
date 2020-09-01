@@ -1,5 +1,5 @@
 # This is a first cut at a ClassHOW for NQP. It doesn't support all the stuff
-# that Perl 6 needs, but it's sufficient for NQP. Supports methods, attributes,
+# that Raku needs, but it's sufficient for NQP. Supports methods, attributes,
 # role composition, inheritance (single and multiple) and introspection.
 
 knowhow NQPClassHOW {
@@ -454,8 +454,13 @@ knowhow NQPClassHOW {
         for self.mro($obj) {
             nqp::push(@tc, $_);
             if nqp::can($_.HOW, 'role_typecheck_list') {
-                for $_.HOW.role_typecheck_list($_) {
-                    nqp::push(@tc, $_);
+                for $_.HOW.role_typecheck_list($_) -> $role {
+                    nqp::push(@tc, $role);
+                    if nqp::can($role.HOW, 'role_typecheck_list') {
+                        for $role.HOW.role_typecheck_list($role) {
+                            nqp::push(@tc, $_);
+                        }
+                    }
                 }
             }
         }
@@ -600,6 +605,10 @@ knowhow NQPClassHOW {
             }
             @meths
         }
+    }
+
+    method submethod_table($obj) {
+        nqp::hash()
     }
 
     method method_table($obj) {

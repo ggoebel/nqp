@@ -1,13 +1,11 @@
 # Introduction
 
-The opcode set is dynamic.
-This document is about core opcodes.
-For Perl 6 opcodes added by the rakudo compiler
+The opcode set is dynamic. This document is about core NQP opcodes. For Raku opcodes added by the rakudo compiler
 see [docs/ops.markdown](https://github.com/rakudo/rakudo/blob/master/docs/ops.markdown) in the rakudo
-repository. They are of the form `nqp::p6*`.
+repository. They are of the form `nqp::p6*` (following the historical naming of Perl 6).
 
-The tool [tools/find-undocumented-ops.p6](https://github.com/perl6/nqp/blob/master/tools/find-undocumented-ops.p6) can be used to find undocumented opcodes.
-For generating an abstract tree that includes opcodes, see [docs/qast.markdown](https://github.com/perl6/nqp/blob/master/docs/qast.markdown).
+The tool [tools/find-undocumented-ops.raku](https://github.com/Raku/nqp/blob/master/tools/find-undocumented-ops.raku) can be used to find undocumented opcodes.
+For generating an abstract tree that includes opcodes, see [docs/qast.markdown](https://github.com/Raku/nqp/blob/master/docs/qast.markdown).
 
 ## Table of Contents
 
@@ -53,9 +51,10 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
 - [Relational / Logic Opcodes](#-relational--logic-opcodes)
   * [cmp](#cmp)
   * [eqat](#eqat)
-  * [eqatic `moar`](#eqatic-moar)
-  * [eqatim `moar`](#eqatim-moar)
-  * [eqaticim `moar`](#eqaticim-moar)
+  * [eqatic](#eqatic)
+  * [eqatim](#eqatim-moar-js)
+  * [eqaticim](#eqaticim-moar-js)
+  * [falsey](#falsey)
   * [iseq](#iseq)
   * [isgt](#isgt)
   * [isge](#isge)
@@ -65,7 +64,13 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [not_i](#not_i)
 - [Array Opcodes](#-array-opcodes)
   * [atpos](#atpos)
+  * [atposnd](#atposnd)
+  * [atpos2d](#atpos2d)
+  * [atpos3d](#atpos3d)
   * [bindpos](#bindpos)
+  * [bindposnd](#bindposnd)
+  * [bindpos2d](#bindpos2d)
+  * [bindpos3d](#bindpos3d)
   * [atposref](#atposref)
   * [elems](#elems)
   * [existspos](#existspos)
@@ -86,6 +91,16 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [hash](#hash)
   * [iterkey](#iterkey)
   * [iterval](#iterval)
+- [Coercion Opcodes](#-coercion-opcodes)
+  * [coerce_in](#coerce_in-moar)
+  * [coerce_ni](#coerce_ni-moar)
+  * [coerce_is](#coerce_is)
+  * [coerce_ns](#coerce_ns-moar)
+  * [coerce_sn](#coerce_sn-moar)
+  * [coerce_si](#coerce_si)
+  * [intify](#intify-moar)
+  * [numify](#numify-moar)
+  * [strify](#strify-moar)
 - [String Opcodes](#-string-opcodes)
   * [chars](#chars)
   * [chr](#chr)
@@ -93,9 +108,9 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [codes](#codes)
   * [concat](#concat)
   * [decode](#decode)
-  * [decodetocodes `moar`](#decodetocodes-moar)
+  * [decodetocodes](#decodetocodes-moar)
   * [encode](#encode)
-  * [encodefromcodes `moar`](#encodefromcodes-moar)
+  * [encodefromcodes](#encodefromcodes-moar)
   * [encodenorm](#encodenorm)
   * [escape](#escape)
   * [fc](#fc)
@@ -103,14 +118,14 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [findnotcclass](#findnotcclass)
   * [flip](#flip)
   * [index](#index)
-  * [indexic](#indexic)
-  * [indexim `moar`](#indexim-moar)
-  * [indexicim `moar`](#indexicim-moar)
+  * [indexic](#indexic-moar)
+  * [indexim](#indexim-moar)
+  * [indexicim](#indexicim-moar)
   * [iscclass](#iscclass)
   * [join](#join)
   * [lc](#lc)
   * [normalizecodes](#normalizecodes)
-  * [numify](#numify)
+  * [numify](#numify-moar)
   * [ord](#ord)
   * [ordbaseat](#ordbaseat)
   * [radix](#radix)
@@ -125,18 +140,19 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [strtocodes](#strtocodes)
   * [substr](#substr)
   * [tc](#tc)
+  * [tclc](#tclc)
   * [uc](#uc)
-  * [unicmp_s `js` `moar`](#unicmp_s)
+  * [unicmp_s](#unicmp_s-moar-js)
   * [x](#x)
 - [Unicode Property Opcodes](#-unicode-property-opcodes)
   * [getuniname](#getuniname)
-  * [getuniprop_int `moar`](#getuniprop_int-moar)
+  * [getuniprop_int](#getuniprop_int-moar)
   * [getuniprop_str](#getuniprop_str)
-  * [getuniprop_bool `moar`](#getuniprop_bool-moar)
-  * [matchuniprop `moar`](#matchuniprop-moar)
+  * [getuniprop_bool](#getuniprop_bool-moar)
+  * [matchuniprop](#matchuniprop-moar)
   * [unipropcode](#unipropcode)
-  * [unipvalcode `moar`](#unipvalcode-moar)
-  * [hasuniprop `moar`](#hasuniprop-moar)
+  * [unipvalcode](#unipvalcode-moar)
+  * [hasuniprop](#hasuniprop-moar)
 - [VM-Provided Streaming Decoder Opcodes](#-vm-provided-streaming-decoder-opcodes)
   * [decoderconfigure](#decoderconfigure)
   * [decodersetlineseps](#decodersetlineseps)
@@ -185,7 +201,6 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [getstdin](#getstdin)
   * [getstdout](#getstdout)
   * [open](#open)
-  * [openasync `jvm`](#openasync-jvm)
   * [print](#print)
   * [readfh](#readfh)
   * [say](#say)
@@ -193,7 +208,7 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [tellfh](#tellfh)
   * [writefh](#writefh)
 - [External command Opcodes](#extern)
-  * [execname](#execname)
+  * [execname](#execname-moar-js)
 - [File / Directory / Network Opcodes](#-file--directory--network-opcodes)
   * [chdir](#chdir)
   * [chmod](#chmod)
@@ -205,6 +220,7 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [filereadable](#filereadable)
   * [filewritable](#filewritable)
   * [gethostname](#gethostname)
+  * [getport](#getport-moar-jvm)
   * [link](#link)
   * [mkdir](#mkdir)
   * [nextfiledir](#nextfiledir)
@@ -219,20 +235,21 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [unlink](#unlink)
 - [Type/Conversion Opcodes](#-typeconversion-opcodes)
   * [bool](#bool)
-  * [bootarray `jvm` `moar`](#bootarray-jvm-moar)
-  * [boothash `jvm` `moar`](#boothash-jvm-moar)
-  * [bootint `jvm` `moar`](#bootint-jvm-moar)
-  * [bootintarray `jvm` `moar`](#bootintarray-jvm-moar)
-  * [bootnum `jvm` `moar`](#bootnum-jvm-moar)
-  * [bootnumarray `jvm` `moar`](#bootnumarray-jvm-moar)
-  * [bootstr `jvm` `moar`](#bootstr-jvm-moar)
-  * [bootstrarray `jvm` `moar`](#bootstrarray-jvm-moar)
+  * [bootarray](#bootarray-moar-jvm)
+  * [boothash](#boothash-moar-jvm)
+  * [bootint](#bootint-moar-jvm)
+  * [bootintarray](#bootintarray-moar-jvm)
+  * [bootnum](#bootnum-moar-jvm)
+  * [bootnumarray](#bootnumarray-moar-jvm)
+  * [bootstr](#bootstr-moar-jvm)
+  * [bootstrarray](#bootstrarray-moar-jvm)
   * [box](#box)
   * [decont](#decont)
   * [defined](#defined)
   * [fromnum](#fromnum)
   * [fromstr](#fromstr)
   * [isbig](#isbig)
+  * [iscoderef](#iscoderef-moar)
   * [isconcrete](#isconcrete)
   * [iscont](#iscont)
   * [isfalse](#isfalse)
@@ -247,21 +264,23 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [isstr](#isstr)
   * [istrue](#istrue)
   * [istype](#istype)
+  * [isttyfh](#isttyfh)
   * [null](#null)
   * [tostr](#tostr)
   * [tonum](#tonum)
   * [unbox](#unbox)
 - [Binary Data Opcodes](#-binary-data-opcodes)
-  * [writeint](#writeint)
-  * [writeuint](#writeuint)
-  * [writenum](#writenum)
-  * [readint](#readint)
-  * [readuint](#readuint)
-  * [readnum](#readnum)
+  * [writeint](#writeint-moar-js)
+  * [writeuint](#writeuint-moar-js)
+  * [writenum](#writenum-moar-js)
+  * [readint](#readint-moar-js)
+  * [readuint](#readuint-moar-js)
+  * [readnum](#readnum-moar-js)
 - [OO/SixModel Opcodes](#-oosixmodel-opcodes)
   * [attrinited](#attrinited)
   * [bindattr](#bindattr)
   * [bindcomp](#bindcomp)
+  * [call](#call)
   * [callmethod](#callmethod)
   * [can](#can)
   * [clone](#clone)
@@ -293,9 +312,9 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [lexprimspec](#lexprimspec)
   * [savecapture](#savecapture)
   * [usecapture](#usecapture)
-  * [getlex](#getlex)
-  * [getlexref](#getlexref)
-  * [bindlex](#bindlex)
+  * [getlex](#getlex-moar-jvm)
+  * [getlexref](#getlexref-moar-jvm)
+  * [bindlex](#bindlex-moar-jvm)
   * [getlexdyn](#getlexdyn)
   * [bindlexdyn](#bindlexdyn)
   * [getlexouter](#getlexouter)
@@ -309,38 +328,48 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [locallifetime](#locallifetime)
   * [const](#const)
   * [cpucores](#cpucores)
+  * [decodelocaltime](#decodelocaltime)
+  * [force_gc](#force_gc-moar-jvm)
+  * [getcodename](#getcodename)
   * [getrusage](#getrusage)
-  * [uname](#uname)
+  * [uname](#uname-moar-js)
   * [debugnoop `jvm`](#debugnoop-jvm)
   * [exit](#exit)
   * [getenvhash](#getenvhash)
   * [getsignals](#getsignals)
   * [backendconfig](#backendconfig)
   * [getpid](#getpid)
-  * [getppid](#getppid)
+  * [getppid](#getppid-moar)
+  * [js](#js-moar=js)
   * [jvmclasspaths `jvm`](#jvmclasspaths-jvm)
+  * [jvmgetproperties `jvm`](#jvmgetproperties-jvm)
+  * [setcodename](#setcodename)
   * [sha1](#sha1)
   * [sleep](#sleep)
   * [takeclosure](#takeclosure)
   * [time](#time)
-  * [mvmstartprofile](#mvmstartprofile)
-  * [mvmendprofile](#mvmendprofile)
+  * [totalmem](#totalmem)
+  * [mvmstartprofile](#mvmstartprofile-moar)
+  * [mvmendprofile](#mvmendprofile-moar)
 - [Native Call / Interoperability Opcodes](#-native-call--interoperability-opcodes)
   * [nativecallrefresh](#nativecallrefresh)
 - [Asynchronous Operations](#-asynchronous-operations)
   * [permit](#permit)
-  * [cancel](#cancel)
-  * [timer](#timer)
-  * [signal](#signal)
-  * [watchfile](#watchfile)
+  * [cancel](#cancel-moar-jvm)
+  * [timer](#timer-moar-jvm)
+  * [signal](#signal-moar-jvm)
+  * [watchfile](#watchfile-moar-jvm)
   * [asyncconnect](#asyncconnect)
   * [asynclisten](#asynclisten)
-  * [asyncwritestr](#asyncwritestr)
   * [asyncwritebytes](#asyncwritebytes)
-  * [asyncreadchars](#asyncreadchars)
-  * [asyncreadbytes](#asyncreadbytes)
+  * [asyncreadbytes](#asyncreadbytes-moar-jvm)
   * [spawnprocasync](#spawnprocasync)
   * [killprocasync](#killprocasync)
+- [HLL-Specific Operations](#-hll-specific-operations)
+  * [hllbool](#hllbool)
+  * [hllboxtype](#hllboxtype)
+  * [hllhash](#hllhash-moar-jvm)
+  * [hlllist](#hlllist-moar-jvm)
 - [Atomic Operations](#-atomic-operations)
   * [cas `moar`](#cas-moar)
   * [cas_i `moar`](#cas_i-moar)
@@ -352,15 +381,15 @@ For generating an abstract tree that includes opcodes, see [docs/qast.markdown](
   * [atomicstore `moar`](#atomicstore-moar)
   * [atomicstore_i `moar`](#atomicstore_i-moar)
   * [barrierfull `moar`](#barrierfull-moar)
-- [Serialization context]
+- [Serialization context](#-serialization-context)
   * [createsc](#createsc)
   * [scsetdesc](#scsetdesc)
   * [scgetdesc](#scgetdesc)
   * [scgethandle](#scgethandle)
-  * [pushcompc](#pushcompsc)
+  * [pushcompsc](#pushcompsc)
   * [popcompsc](#popcompsc)
-  * [scsetobj](#scsetobj)
-  * [setobjsc](#seetobjsc)
+  * [scsetobj](#scsetobjc)
+  * [setobjsc](#setobjsc)
   * [getobjsc](#getobjsc)
   * [scgetobjidx](#scgetobjidx)
   * [serialize](#serialize)
@@ -392,7 +421,8 @@ Opcode variants may contain a type suffix, which usually indicates:
 * `_I` argument is a Big Integer
 
 They may also have a numeric suffix, which typically indicates the number
-of arguments required.
+of arguments required. (_Note that some opcodes contain an underscore
+not being used to indicate a type suffix_.)
 
 In opcode signatures below, we use the following types, which may not
 correspond directly to NQP types.
@@ -430,6 +460,7 @@ The opcodes are grouped into the following categories:
 * [Relational / Logic Opcodes](#logic)
 * [Array Opcodes](#array)
 * [Hash Opcodes](#hash)
+* [Corcion Opcodes](#coercion)
 * [String Opcodes](#string)
 * [Unicode Property Opcodes](#unicode)
 * [Conditional Opcodes](#conditional)
@@ -583,6 +614,7 @@ and of type `$type_bigint` for positive exponents.
 
 ## rand
 * `rand_n(num $n --> num)`
+* `rand_i(int $i, Mu:T $type --> int)` `moar`
 * `rand_I(Int $i, Mu:T $type --> Int)`
 
 Returns a psuedo-random bigint up to the value of the
@@ -664,23 +696,31 @@ otherwise return 0.
 * `eqatic(str haystack, str $needle, int $pos --> int)`
 Case-insensitive `eqat`
 
-## eqatim `js moar`
+## eqatim `moar` `js`
 * `eqatim(str haystack, str $needle, int $pos --> int)`
 Ignore-mark `eqat`, NFD decomposes and matches the base codepoint
 
 Example: `eqat("á", "a", 0) → 1`
 
-## eqaticim `js moar`
+## eqaticim `moar` `js`
 * `eqaticim(str haystack, str $needle, int $pos --> int)`
 Case-insensitive and ignore-mark `eqat`
+
+## falsey
+* `falsey($a --> int)`
+
+Return 0 if the parameter has a truthy value, 1 otherwise.
 
 ## iseq
 * `iseq_i(int $l, int $r --> int)`
 * `iseq_n(num $l, num $r --> int)`
 * `iseq_s(str $l, str $r --> int)`
 * `iseq_I(Int $l, Int $r --> int)`
+* `iseq_snfg(str $l, str $r --> int)` `js`
 
 Return 1 if the two parameters are equal, 0 otherwise.
+
+`iseq_snfg` is a JS specific opcode that first normalizes string arguments to NFC.
 
 ## isgt
 * `isgt_i(int $l, int $r --> int)`
@@ -719,8 +759,11 @@ Return 1 if $l is less than or equal to $r, otherwise 0.
 * `isne_n(num $l, num $r --> int)`
 * `isne_s(str $l, str $r --> int)`
 * `isne_I(Int $l, Int $r --> int)`
+* `isne_snfg(str $l, str $r --> int)` `js`
 
 Return 1 if the two parameters are not equal, otherwise 0.
+
+`isne_snfg` is a JS specific opcode that first normalizes string arguments to NFC.
 
 ## not_i
 * `not_i(int $val --> int)`
@@ -737,6 +780,31 @@ Return 1 if `$val` is 0, 0 otherwise.
 
 Return whatever is bound to @arr at position $i.
 
+## atposnd
+* `atposnd(@arr, @indices --> Mu)`
+* `atposnd_i(@arr, @indices --> int)`
+* `atposnd_n(@arr, @indices --> num)`
+* `atposnd_s(@arr, @indices --> str)`
+
+Return whatever is bound to the n-dimensional array @arr at @indices,
+where @indices is a 1-dimensional array of index values.
+
+## atpos2d
+* `atpos2d(@arr, int $i, int $j --> Mu)`
+* `atpos2d_i(@arr, int $i, int $j --> int)`
+* `atpos2d_n(@arr, int $i, int $j --> num)`
+* `atpos2d_s(@arr, int $i, int $j --> str)`
+
+Return whatever is bound to the 2-dimensional array @arr at position $i, $j.
+
+## atpos3d
+* `atpos3d(@arr, int $i, int $j, int $k --> Mu)`
+* `atpos3d_i(@arr, int $i, int $j, int $k --> int)`
+* `atpos3d_n(@arr, int $i, int $j, int $k --> num)`
+* `atpos3d_s(@arr, int $i, int $j, int $k --> str)`
+
+Return whatever is bound to the 3-dimensional array @arr at position $i, $j, $k.
+
 ## bindpos
 * `bindpos(@arr, int $i, Mu $v --> Mu)`
 * `bindpos_i(@arr, int $i, int $v --> int)`
@@ -745,10 +813,36 @@ Return whatever is bound to @arr at position $i.
 
 Bind $v to @arr at position $i and return $v.
 
+## bindposnd
+* `bindposnd(@arr, @indices, Mu $v --> Mu)`
+* `bindposnd_i(@arr, @indices, int $v --> int)`
+* `bindposnd_n(@arr, @indices, num $v --> num)`
+* `bindposnd_s(@arr, @indices, str $v --> str)`
+
+Bind $v to @arr at the position specified by @indices and return $v.
+@indices is a 1-dimensional array of index values.
+
+## bindpos2d
+* `bindpos2d(@arr, int $i, int $j, Mu $v --> Mu)`
+* `bindpos2d_i(@arr, int $i, int $j, int $v --> int)`
+* `bindpos2d_n(@arr, int $i, int $j, num $v --> num)`
+* `bindpos2d_s(@arr, int $i, int $j, str $v --> str)`
+
+Bind $v to the 2-dimensional arrray @arr at position $i, $j and return $v.
+
+## bindpos3d
+* `bindpos3d(@arr, int $i, int $j, int $k, Mu $v --> Mu)`
+* `bindpos3d_i(@arr, int $i, int $j, int $k, int $v --> int)`
+* `bindpos3d_n(@arr, int $i, int $j, int $k, num $v --> num)`
+* `bindpos3d_s(@arr, int $i, int $j, int $k, str $v --> str)`
+
+Bind $v to the 3-dimensional arrray @arr at position $i, $j, $k and return $v.
+
 ## atposref
-* atposref_i(@arr, int $idx --> int)
-* atposref_n(@arr, int $idx --> num)
-* atposref_s(@arr, int $idx --> str)
+* `atposref(@arr, int $idx --> Mu)` `js`
+* `atposref_i(@arr, int $idx --> int)`
+* `atposref_n(@arr, int $idx --> num)`
+* `atposref_s(@arr, int $idx --> str)`
 
 Returns a container (of type `IntPosRef`, `NumPosRef`, or `StrPosRef`) that you can assign to or read from which will directly access `@arr` at index `$idx`.
 
@@ -769,7 +863,7 @@ Return 1 if anything is bound to `@arr` at position `$i`,
 * `list_i(... --> Mu)`
 * `list_n(... --> Mu)`
 * `list_s(... --> Mu)`
-* `list_b(... --> Mu)`
+* `list_b(... --> Mu)` `moar`
 
 Create a list of the given parameters. If no arguments are passed,
 an empty list is created. If a typed variant is used, the parameters
@@ -822,7 +916,7 @@ Copy the elements in `@arr` starting at `$start_pos` and ending at `$end_pos`
 and return the resulting list. If `$start_pos` or `$end_pos` is ```-n``` it will
 translate into the ```n```th position relative to the end of the list.
 
-```perl6
+```raku
 
 my @a := 'a', 'b', 'c';
 print($_ ~ ', ') for nqp::slice(@a, 0, -2);
@@ -855,7 +949,7 @@ Return the $v on JVM.
 
 Returns an iterator object to iterate over a list's items.  For example:
 
-```perl6
+```raku
 
 my $list := nqp::list('a', 'b', 'c');
 my $iter := nqp::iterator($list);
@@ -873,13 +967,13 @@ You can also use `nqp::iterator()` to iterate over a hash's key-value pairs.
 ## atkey
 * `atkey(%hash, str $key --> Mu)`
 * `atkey_i(%hash, str $key --> int)`
-* `atkey_u(%hash, str $key --> uint)`
-  * Note, there's no bindkey_u yet since at the moment atkey_u is only used
-    for getting values from the lexpad
 * `atkey_n(%hash, str $key --> num)`
 * `atkey_s(%hash, str $key --> str)`
+* `atkey_u(%hash, str $key --> uint)` `moar`
 
 Return the value of %hash at key $key.
+
+_Note, there's no bindkey_u yet since at the moment atkey_u is only used for getting values from the lexpad_
 
 ## bindkey
 * `bindkey(%hash, str $key, Mu $v --> $v)`
@@ -912,13 +1006,13 @@ otherwise.
 Returns the key associated with the given key-value pair.
 For example:
 
-```perl6
+```raku
 for %hash {
     say(nqp::iterkey_s($_), ' => ', nqp::iterval($_));
 }
 ```
 Or alternately:
-```perl6
+```raku
 my $iter := nqp::iterator(%hash);
 while $iter {
     my $pair := nqp::shift($iter);
@@ -932,10 +1026,44 @@ while $iter {
 
 Returns the value associated with the given key-value pair.
 
+# <a id="coercion"></a> Coercion opcodes
+
+coerce_* opcodes do lower level conversion between int, num and str.
+intify, numify, strify respectively try to use the .Int, .Num or .Str method.
+If absent rely on lower level conversions.
+
+## coerce_in `moar`
+* `coerce_in(int --> num)`
+
+## coerce_ni `moar`
+* `coerce_ni(num --> int)`
+
+## coerce_is
+* `coerce_is(int --> str)`
+
+## coerce_ns `moar`
+* `coerce_ns(num --> str)`
+
+## coerce_sn `moar`
+* `coerce_sn(str --> num)`
+
+## coerce_si
+* `coerce_si(str --> int)`
+
+## intify `moar`
+* `intify($o --> int)`
+
+## numify `moar`
+* `numify($o --> num)`
+
+## strify `moar`
+* `strify($o --> str)`
+
 # <a id="string"></a> String Opcodes
 
 ## chars
 * `chars(str $str --> int)`
+* `charsnfg(str $str --> int)` `js`
 
 Return the number of characters in the string.
 
@@ -1039,11 +1167,11 @@ Return the position in `$haystack` at which `$needle` appears, or -1
 if `$needle` does not appear. Begin searching at position `$pos` if specified,
 or at 0, otherwise.
 
-* `indexfrom(str $haystack, str $needle, int $pos)` _Internal_
+* `indexfrom(str $haystack, str $needle, int $pos)` `moar` `jvm` _Internal_
 
 `index` is converted to this internal opcode by the compiler.
 
-## indexic
+## indexic `moar`
 * `indexic(str $haystack, str $needle, int $pos --> int)`
 
 This op has the same arguments and functionality as nqp::index,
@@ -1066,6 +1194,7 @@ Ignorecase and ignoremark `index`
 
 ## iscclass
 * `iscclass(int $class, str $str, int $i --> int)`
+* `iscclassnfg(int $class, str $str, int $i --> int)` `js`
 
 Return 1 if the `$i`th character of $str is of the specified class,
 (`nqp::const::CCLASS_*`), 0 otherwise.
@@ -1090,7 +1219,7 @@ be 32-bit integer arrays.
 
 ## numify
 
-```perl6
+```raku
 use nqp; say nqp::numify(nqp::unbox_s("42e0"));
 ```
 
@@ -1106,12 +1235,12 @@ Return the unicode codepoint of the first character in `$str`, or
 at the `$i`th character, if it's specified.
 
 * `ordat(str $str, int $i --> int)` _Internal_
-* `ordfirst(str $str --> int)` _Internal_
+* `ordfirst(str $str --> int)` `moar` `jvm` _Internal_
 
 `ord` is converted to these internal opcodes by the compiler.
 
 ## ordbaseat
-`ordbaseat(str $str, int $pos --> int)`
+* `ordbaseat(str $str, int $pos --> int)`
 
 Returns the Unicode codepoint which is the base (non extend/prepend character
 at that position). If it is a degenerate, and contains no base character,
@@ -1128,7 +1257,7 @@ The result of the conversion returns an array with
     out[1] = $radix ** $number-of-digits-converted
     out[2] = offset after consuming digits, -1 if no digits consumed
 
-The opcode skips single underscores between pairs of digits, per the Perl 6
+The opcode skips single underscores between pairs of digits, per the Raku
 specification.
 
 The $flags is a bitmask that modifies the parse and/or result:
@@ -1152,7 +1281,7 @@ Searching backwards through the `$haystack`, return the position at which
 `$needle` appears, or -1 if it does not. Begin searching at `$pos` if
 specified, otherwise start from the last position.
 
-* `rindexfrom(str $haystack, str $needle, int $pos)` _Internal_
+* `rindexfrom(str $haystack, str $needle, int $pos)` `moar` `jvm` _Internal_
 * `rindexfromend(str $haystack, str $needle)` `jvm` _Internal_
 
 `rindex` is converted to this internal opcode by the compiler.
@@ -1188,7 +1317,7 @@ and `int`. `mine` gets the the value in question and returns true if this
 handler is in charge for this type, false otherwise.
 The method `int` does the conversion for patterns like %d.
 
-```perl6
+```raku
 my class MyHandler {
     method mine($x) { $x ~~ MyType }
     method int($x) { $x.Int }
@@ -1231,28 +1360,35 @@ not allowed.
 ## substr
 * `substr(str $str, int $position --> str)`
 * `substr(str $str, int $position, int $length --> str)`
+* `substr_s(str $str, int $position --> str)` `moar`
+* `substr_s(str $str, int $position, int $length --> str)` `moar`
+* `substr2(str $str, int $position)` `jvm` _Internal_
+* `substr3(str $str, int $position, int $length)` `jvm` _Internal_
+* `substrnfg(str $str, int $position --> str)` `js`
+* `substrnfg(str $str, int $position, int $length --> str)` `js`
 
 Return the portion of the string starting at the given position.
 If `$length` is specified, only return that many characters. The
 numbered variants required the args specified - the unnumbered
 version may use either signature.
 
-* `substr2(str $str, int $position)` `jvm` _Internal_
-* `substr3(str $str, int $position, int $length)` `jvm` _Internal_
-
-JVM specific internal opcodes for `substr`.
-
 ## tc
 * `tc(str $str --> str)`
 
 Return titlecase copy of string.
+
+## tclc
+* `tclc(str $str --> str)`
+
+Return copy of string with first character titlecased, and remaining
+characters lowercased.
 
 ## uc
 * `uc(str $str --> str)`
 
 Return uppercase copy of string.
 
-## unicmp_s `js` `moar`
+## unicmp_s `moar` `js`
 * `unicmp_s(str $str1, str Str2, int $mode, int $iso639, int $iso3166 --> int)`
 
 Compares strings using the [Unicode Collation Algorithm][UCA] (UCA).
@@ -1520,7 +1656,7 @@ If a `$post` block is present, run that at the end, regardless of `$condition`.
 
 Executes the given statements sequentially. For example:
 
-```perl6
+```raku
 
 nqp::stmts((my $a := nqp::chars("foo")), say($a), say("bar"));
 # 3
@@ -1661,13 +1797,6 @@ Return the filehandle for standard output.
 Open the specified file in the given mode. Valid modes include `r` for read,
 `w` for write, and `wa` for write with append. Returns a filehandle.
 
-## openasync `jvm`
-_Experimental_
-* `openasync(str $filename, str $mode)`
-
-Open the specified file in the given mode for async IO.
-See `open` for valid modes.
-
 ## print
 * `print(str $str)`
 
@@ -1689,6 +1818,10 @@ Output the given string to stdout, followed by a newline.
 
 Seek in the filehandle to the location specified by the offset and whence.
 
+    * `0` - from beginning of file
+    * `1` - from current position
+    * `2` - from end of file
+
 ## tellfh
 * `tellfh(Handle $fh --> int)`
 
@@ -1700,14 +1833,14 @@ Return current access position for an open filehandle.
 Output the given object to the filehandle. Returns the number of bytes written.
 
 # <a id="extern"></a> External command Opcodes
-## execname
+## execname `moar` `js`
 * `execname(--> str)`
 
-It's used to implement `$*EXECUTABLE` in Perl 6, and is the name of the
-current "executable". So if you run `./perl6-m ....` then it'll be the
-`./perl6-m`. It's actually set at present by passing a `--execname=` argument
-to MoarVM, since `perl6` is actually a shell script. But when we do get to
-providing a fake executable for `perl6` instead, then it'd just initialize it
+It's used to implement `$*EXECUTABLE` in Raku, and is the name of the
+current "executable". So if you run `./raku-m ....` then it'll be the
+`./raku-m`. It's actually set at present by passing a `--execname=` argument
+to MoarVM, since `raku` is actually a shell script. But when we do get to
+providing a fake executable for `raku` instead, then it'd just initialize it
 to `argv[0]`.
 
 # <a id="filedirnet"></a> File / Directory / Network Opcodes
@@ -1767,6 +1900,12 @@ If not, returns 0. If an error occurs, return -1.
 * `gethostname(str $str --> str)`
 
 Returns the hostname of the system where it is run.
+
+## getport `moar` `jvm`
+* `getport($obj --> int)`
+
+If the specified object is an IO::Handle, return the integer port
+number the object is listening on. If an error occurs, return -1.
 
 ## link
 * `link(str $before, str $after --> int)`
@@ -1922,42 +2061,42 @@ didn't exist. May throw an exception.
 
 Returns 0 if `$val` is 0, otherwise 1.
 
-## bootarray `jvm` `moar`
+## bootarray `moar` `jvm`
 * `bootarray()`
 
 Returns a VM specific type object for a native array.
 
-## boothash `jvm` `moar`
+## boothash `moar` `jvm`
 * `boothash()`
 
 Returns a VM specific type object for a native hash.
 
-## bootint `jvm` `moar`
+## bootint `moar` `jvm`
 * `bootint()`
 
 Returns a VM specific type object that can box a native int.
 
-## bootintarray `jvm` `moar`
+## bootintarray `moar` `jvm`
 * `bootintarray()`
 
 Returns a VM specific type object for a native array of int.
 
-## bootnum `jvm` `moar`
+## bootnum `moar` `jvm`
 * `bootnum()`
 
 Returns a VM specific type object that can box a native num.
 
-## bootnumarray `jvm` `moar`
+## bootnumarray `moar` `jvm`
 * `bootnumarray()`
 
 Returns a VM specific type object for a native array of num.
 
-## bootstr `jvm` `moar`
+## bootstr `moar` `jvm`
 * `bootstr()`
 
 Returns a VM specific type object that can box a native str.
 
-## bootstrarray `jvm` `moar`
+## bootstrarray `moar` `jvm`
 * `bootstrarray()`
 
 Returns a VM specific type object for a native array of str.
@@ -1967,14 +2106,15 @@ Returns a VM specific type object for a native array of str.
 * `box_n(num $val, Mu:T $type)`
 * `box_s(str $val, Mu:T $type)`
 
-Given a native value, return a perl 6 object of the given type
+Given a native value, return a Raku object of the given type
 with the same value.
 
 ## decont
 
 `decont(Mu $val --> Mu)`
 
-Extract, or **de**-**cont**ainerize, a value from a `Scalar` container:
+Extract, or **de**-**cont**ainerize, a value from a `Scalar` container.
+If the argument is not a container, the argument is returned unchanged :
 
     use nqp;
     my $a = (1, 2, 3);
@@ -2002,6 +2142,11 @@ Convert string value to a Big Integer of the given type.
 
 Returns a 1 if the object's numerical representation requires a big int, 0 otherwise.
 
+## iscoderef `moar`
+* `iscoderef($obj --> int)`
+
+Returns a 1 if the object contains a code reference, 0 otherwise.
+
 ## isconcrete
 * `isconcrete(Mu $obj --> int)`
 
@@ -2009,6 +2154,9 @@ Returns a 1 if the object is not a type object, 0 otherwise.
 
 ## iscont
 * `iscont(Mu $obj --> int)`
+* `iscont_i(int $int --> int)`
+* `iscont_n(num $int --> int)`
+* `iscont_s(str $int --> int)`
 
 Returns a 1 if the object is a container type, 0 otherwise.
 
@@ -2075,6 +2223,11 @@ Returns a 1 if the object has a truthy value, 0 otherwise.
 
 Returns a 1 if the object is of the given type, 0 otherwise.
 
+## isttyfh
+* `isttyfh(Mu $obj --> int)`
+
+Returns a 1 if the object is an IO::Handle object that is a tty, 0 otherwise.
+
 ## null
 * `null(--> Mu)`
 * `null_s(--> str)`
@@ -2100,8 +2253,9 @@ Convert Big Integer value to a native number.
 * `unbox_i(Mu $val --> int)`
 * `unbox_n(Mu $val --> num)`
 * `unbox_s(Mu $val --> str)`
+* `unbox_u(Mu $val --> str)` `moar`
 
-Given a Perl 6 object, return a native with the same value,
+Given a Raku object, return a native with the same value,
 of the type indicated by the opcode suffix.
 
 # <a id="binarydata"></a> Binary Data Opcodes
@@ -2110,7 +2264,7 @@ For these definitions, `buffer` refers to a concrete object with a REPR of
 either `VMArray` or `MultiDimArray`, the latter being constrained to a single
 dimension. (Note: dimensionality is a property of the type, meaning that type
 specialization is already sufficient to optimize out both the REPR and shape
-checks.) In either case, the array must be an 8-bit integer array (as a Perl 6
+checks.) In either case, the array must be an 8-bit integer array (as a Raku
 `Blob` or `Buf` will be).
 
 ### Constants
@@ -2134,38 +2288,38 @@ Operations not configured with one of these options will assume native endian.
 Reading or writing little endian on a little endian machine will, of course,
 carry no transformation overhead.
 
-## writeint
-* `nqp::writeint(buffer $target, int $offset, int $value, int $flags)`
+## writeint `moar` `js`
+* `writeint(buffer $target, int $offset, int $value, int $flags)`
 
 Writes the signed integer `$value` at `$offset` into the buffer `$target`,
 with the size and endianness specified by `$flags`.
 
-## writeuint
-* `nqp::writeuint(buffer $target, int $offset, uint $value, int $flags)`
+## writeuint `moar` `js`
+* `writeuint(buffer $target, int $offset, uint $value, int $flags)`
 
 Writes the unsigned integer `$value` at `$offset` into the buffer `$target`,
 with the size and endianness specified by `$flags`.
 
-## writenum
-* `nqp::writenum(buffer $target, int $offset, num $value, int $flags)`
+## writenum `moar` `js`
+* `writenum(buffer $target, int $offset, num $value, int $flags)`
 
 Writes the floating point `$value` at `$offset` into the buffer `$target`.
 Only 32-bit and 64-bit sizes are supported.
 
-## readint
-* `nqp::readint(buffer $source, int $offset, int $flags --> int)`
+## readint `moar` `js`
+* `readint(buffer $source, int $offset, int $flags --> int)`
 
 Reads a signed integer at offset `$offset` from `$source` with size and
 endianness specified by `$flags`. Returns that value, widened to a 64-bit int.
 
-## readuint
-* `nqp::readuint(buffer $source, int $offset, int $flags --> uint)`
+## readuint `moar` `js`
+* `readuint(buffer $source, int $offset, int $flags --> uint)`
 
 Reads an unsigned integer at offset `$offset` from `$source` with size and
 endianness specified by `$flags`. Returns that value, widened to a 64-bit uint.
 
-## readnum
-* `nqp::readnum(buffer $source, int $offset, int $flags --> num)`
+## readnum `moar` `js`
+* `readnum(buffer $source, int $offset, int $flags --> num)`
 
 Reads a floating point number at offset `$offset` from `$source` with the
 size specified by `$flags`. Returns that value, widened to a 64-bit num.
@@ -2201,6 +2355,16 @@ In general, though, `$lang` will inherit from `HLL::Compiler`, and the above
 will be achieved via:
 
     $lang.language('My::Lang');
+
+## call
+* `call()`
+
+This method is not documented yet.
+
+Example:
+
+    nqp::call(nqp::getlexcaller('&say'), 'foo')
+
 
 ## callmethod
 * `callmethod(Mu $obj, str $methodname, *@pos, *%named --> Mu)`
@@ -2284,7 +2448,7 @@ See `bindcomp` for more information.
 ## how
 * `how(Mu $obj --> Mu)`
 
-NQP equivalent for Perl 6's `$obj.HOW`.
+NQP equivalent for Raku's `$obj.HOW`.
 
 ## rebless
 * `rebless(Mu $obj, Mu:T $type --> Mu)`
@@ -2304,12 +2468,12 @@ Replace `$obj`'s WHO. Return `$obj`.
 ## who
 * `who(Mu $obj --> Mu)`
 
-NQP equivalent for Perl 6's `$obj.WHO`.
+NQP equivalent for Raku's `$obj.WHO`.
 
 ## what
 * `what(Mu $obj --> Mu)`
 
-NQP equivalent for Perl 6's `$obj.WHAT`.
+NQP equivalent for Raku's `$obj.WHAT`.
 
 ## where
 * `where(Mu $obj --> int)`
@@ -2414,7 +2578,7 @@ It's valid to implement this exactly the same way as savecapture if there's
 no performance benefit to be had in a split.
 Used by the multi-dispatcher.
 
-## getlex
+## getlex `moar` `jvm`
 * `getlex(str $name)`
 * `getlex_i(str $name)`
 * `getlex_n(str $name)`
@@ -2424,7 +2588,7 @@ Looks up the lexical with the specified name and the specified type.
 Searching in the outer frames, starting at the current.
 An error is thrown if it does not exist or if the type is incorrect.
 
-## getlexref
+## getlexref `moar` `jvm`
 * `getlexref_i(str $name)`
 * `getlexref_n(str $name)`
 * `getlexref_s(str $name)`
@@ -2438,7 +2602,7 @@ a lexpad as if it were a read-writable container we can pass around. the
 lexicalref that gets created holds a reference to the frame in question and
 any access to it acts like `getlex` from the frame it originated in
 
-## bindlex
+## bindlex `moar` `jvm`
 * `bindlex(str $name, Mu $value)`
 * `bindlex_i(str $name, int $value)`
 * `bindlex_n(str $name, num $value)`
@@ -2501,9 +2665,7 @@ variable. Same as the `:=` operator in NQP.
 # <a id="misc"></a> Miscellaneous Opcodes
 
 ## locallifetime
-```perl6
-QAST::Op.new( :op('locallifetime'), :node($/), QAST::Stmt.new(...))
-```
+* `QAST::Op.new(:op<locallifetime>, :node($/), QAST::Stmt.new(...))`
 
 Defines when local variables can be considered dead. E.g. the temporary setting
 of `$_` on the right side of `~~` uses that.
@@ -2515,19 +2677,19 @@ Not actually an opcode, but a collection of several constants. Each of the
 constants below can be used in nqp as (e.g.) `nqp::const::CCLASS_ANY`.
 
     * CCLASS_ANY
-    * CCLASS_UPPERCASE
-    * CCLASS_LOWERCASE
-    * CCLASS_ALPHABETIC
-    * CCLASS_NUMERIC
+    * CCLASS_UPPERCASE Lu
+    * CCLASS_LOWERCASE Ll
+    * CCLASS_ALPHABETIC Lo | Ll | Lu | Lt | Lm
+    * CCLASS_NUMERIC Nd
     * CCLASS_HEXADECIMAL
-    * CCLASS_WHITESPACE
-    * CCLASS_PRINTING
-    * CCLASS_BLANK
-    * CCLASS_CONTROL
+    * CCLASS_WHITESPACE (9..13,32,133,160,5760,8192..8202,8232,8233,8239,8287,12228)
+    * CCLASS_PRINTING !(0..31, 127..159)
+    * CCLASS_BLANK Zs
+    * CCLASS_CONTROL (0..31, 127..159)
     * CCLASS_PUNCTUATION
-    * CCLASS_ALPHANUMERIC
-    * CCLASS_NEWLINE
-    * CCLASS_WORD
+    * CCLASS_ALPHANUMERIC Lo | Ll | Lu | Lt | Lm | Nd
+    * CCLASS_NEWLINE Zl Zp
+    * CCLASS_WORD Lo | Ll | Lu | Lt | Lm | Nd + "_"
 
     * HLL_ROLE_NONE
     * HLL_ROLE_INT
@@ -2594,6 +2756,25 @@ constants below can be used in nqp as (e.g.) `nqp::const::CCLASS_ANY`.
 Returns a native integer for the number of CPU cores that are reported to be
 available.
 
+## decodelocaltime
+* `decodelocaltime(int $epoch --> int @tm)`
+
+Returns an integer array with localtime information, formatted like the
+`C struct tm`: $sec,$min,$hour,$mday,$mon,$year,$weekday,$yearday,$isdst.
+Note that contrary to C's localtime() function, the $year contains the
+actual year (A.D), and the $month has been normalized to 1..12.
+
+## force_gc `moar` `jvm`
+* `force_gc()`
+
+Force the garbage collector to run.
+
+## getcodename
+* `getcodename($obj --> str)`
+
+Returns the name of the given concrete code object.
+Throws an exception if an object of the wrong type is passed.
+
 ## getrusage
 * `getrusage(int @rusage)`
 
@@ -2625,7 +2806,7 @@ rather than **Kbytes** on MacOS.
 Elements may be 0 if it is impossible to determine that value in the current
 system.
 
-## uname
+## uname `moar` `js`
 * `uname(--> Mu)`
 
 Returns a string array and fills it with uname data, of which the following
@@ -2719,10 +2900,30 @@ Return the current process id, an int.
 
 Return the process id of the parent process, an int.
 
+## js `moar` `js`
+* `js(str)`
+
+Execute the string of JavaScript code passed in.
+
+While this opcode exists in moar, it throws an exception declaring it is not implemented.
+
 ## jvmclasspaths `jvm`
 * `jvmclasspaths(--> Mu)`
 
 Converts the JVM property `java.class.path` into a list of paths, returns it.
+
+## jvmgetproperties `jvm`
+* `jvmgetproperties(--> Hash)`
+
+Map the JVM's System.getProperties into a Hash usable in NQP. Normalizes some OS names
+(key: 'os.name'), returns all other data as is.
+
+## setcodename
+* `setcodename($obj, str)`
+
+Sets the name of the given code object.
+Throws an exception if an object of the wrong type is passed.
+
 
 ## sha1
 * `sha1(str $str -> str)`
@@ -2749,13 +2950,18 @@ Creates a lexical closure from the block's outer scope.
 Return the time in seconds since January 1, 1970 UTC. `_i` variant returns
 an integral number of seconds, `_n` returns a fractional amount.
 
-## mvmstartprofile
+## totalmem
+* `totalmem(--> int)`
+
+Returns the number of bytes of memory in use by the VM.
+
+## mvmstartprofile `moar`
 * `mvmstartprofile(hash $config)`
 
 Turns on one of MoarVM's profilers. The configuration must have a `kind` key that specifies which profiler will be turned on:
 
 * `instrumented`
-  
+
   takes no further configuration options. records call graph, garbage collection, and object allocation information.
 
 * `heap`
@@ -2764,7 +2970,7 @@ Turns on one of MoarVM's profilers. The configuration must have a `kind` key tha
 
 If a profiler is already active, an exception will be thrown; only one profiler can run at a time.
 
-## mvmendprofile
+## mvmendprofile `moar`
 * `mvmendprofile(--> Object)`
 
 Turns off the profiler and returns data gathered.
@@ -2791,7 +2997,7 @@ allocation information.  It has the following structure:
 The second element of the list returned by nqp::mvmendprofile, is a list of
 hashes, one for each thread on which data has been collected.  It has the
 following structure (times are in microseconds, sizes are in bytes):
- 
+
     0                                 - hash with info of thread
     ├ thread => 1                       - OS thread ID
     ├ parent => 0                       - OS thread ID of parent thread
@@ -2876,7 +3082,7 @@ If `$permits` is set to any value greater than or equal to zero, then:
   If the resulting number of permits allowed is greater than zero and the
   reader is not running, it will be started.
 
-## cancel
+## cancel `moar` `jvm`
 * `cancel(AsyncTask $handle)`
 
 Takes something with the AsyncTask REPR and tries to cancel it, if it
@@ -2884,7 +3090,7 @@ is possible to do so. If it is somehow not possible (for example, the
 operation already completed anyway), then nothing will happen. This is to
 avoid race conditions.
 
-## timer
+## timer `moar` `jvm`
 * `timer($queue, $schedulee, int $timeout, int $repeat, $handle_type)`
 
 Starts a timer. If timeout is zero, the $schedulee is immediately pushed to
@@ -2893,14 +3099,14 @@ non-zero, after the initial timeout period it will then be pushed again at
 the repeat interval. Returns an object of type $handle_type, which has a
 AsyncTask REPR. Cancellation stops the timer ever repeating again.
 
-## signal
+## signal `moar` `jvm`
 * `signal($queue, $schedulee, int [nqp::cosnt::SIG_], $handle_type)`
 
 Sets up a signal handler for the given signal. Whenever it occurs, an
 array is pushed to the queue containing the schedulee and the signal number.
 Cancel to stop handling it.
 
-## watchfile
+## watchfile `moar` `jvm`
 * `watchfile($queue, $schedulee, str $filename, $handle_type)`
 
 Watches an individual file for changes. Pushes an array to the queue
@@ -2926,14 +3132,6 @@ the schedulee and the newly created asynchronous socket, for communicating with
 the connecting client. Returns an AsyncTask that can be cancelled to stop
 listening, or throws an exception if there is an error starting to listen.
 
-## asyncwritestr
-* `asyncwritestr($handle, $queue, $schedulee, str $to_write, $handle_type)`
-
-Writes a string to some handle capable of asynchronous operations. Once the write
-is complete, the queue will be passed an array consisting of the schedulee, an
-integer containing the number of bytes written or a type object if there was an
-error, and a string containing an error or some type object if none.
-
 ## asyncwritebytes
 * `asyncwritebytes($handle, $queue, $schedulee, $to_write, $handle_type)`
 
@@ -2943,16 +3141,7 @@ schedulee, an integer containing the number of bytes written or a type
 object if there was an error, and a string containing an error or some type
 object if none.
 
-## asyncreadchars
-* `asyncreadchars($handle, $queue, $schedulee, $handle_type)`
-
-Starts reading chars from the handle. When a packet is received and decoded,
-an array will be pushed to the queue containing the schedulee, a squence
-number that starts at 0, the string if anything was decoded (type object on
-error) and an error string (some type object if no error). If EOF is
-reached, a sequence number of -1 is sent. Cancel to stop reading.
-
-## asyncreadbytes
+## asyncreadbytes `moar` `jvm`
 * `asyncreadbytes($handle, $queue, $schedulee, $buf_type, $handle_type)`
 
 Starts reading bytes from the handle. When a packet is received, a $buf_type
@@ -2969,6 +3158,61 @@ Replaced *shell* and *spawn*. See t/nqp/111-spawnprocasync.t for an example of u
 
 ## killprocasync
 * `killprocasync($handle, $signal)`
+
+# <a id="hll-specific"></a> HLL-Specific Operations
+
+## hllbool
+* `hllbool(int -> obj)`
+
+If passed 0, return a HLL specific Boolean false value,
+otherwise, a true one. For Raku, this maps to ```Bool::False```
+and ```Bool::True```, respectively.
+
+## hllboxtype
+* `hllboxtype_i(Mu)`
+* `hllboxtype_n(Mu)`
+* `hllboxtype_s(Mu)`
+
+Ignores any args passed and returns the HLL specific type
+objects for each basic type. For Raku, this maps to ```Int```,
+```Num```, and ```Str```.
+
+## hllhash `moar` `jvm`
+* `hllhash(Mu)`
+
+Returns HLL specific type object for a hash.
+Ignores optional argument.
+
+## hlllist `moar` `jvm`
+* `hlllist(Mu)`
+
+Returns HLL specific type object for a list.
+Ignores optional argument.
+
+## bindhllsym / bindcurhllsym
+* `bindhllsym(str $hllname, str $symname, $value)`
+* `bindcurhllsym(str $symname, $value)`
+
+Store a value in a specified HLL's symbol hash at a given key; the `cur`
+variant uses the hll the code that has the op in it was compiled for.
+
+## gethllsym / getcurhllsym
+* `gethllsym(str $hllname, str $symname --> Mu)`
+* `getcurhllsym(str $symname --> Mu)`
+
+Retrieve a value from a specified HLL's symbol hash at a given key; The `cur`
+variant uses the hll the code that has the op in it was compiled for.
+
+## usecompilerhll / usecompileehll
+* `usecompilerhllconfig`
+* `usecompileehllconfig`
+
+Increases or decreases the "compilee depth" value. When the compilee depth is
+greater than one, every hll access will hit the "compilee's HLL config",
+otherwise every access will hit the "compiler's HLL config".
+
+This serves, for example, to seperate a running NQP compiler from an NQP
+compiler it's compiling, when compile-time evaluation happens.
 
 # <a id="atomic"></a> Atomic Operations
 
@@ -3055,10 +3299,10 @@ is, with appropriate barriering to ensure the changed value is "published").
 
 Performs a full memory barrier.
 
-# Serialization context
+# <a id="serialization-context"></a> Serialization context
 Abbreviated as SC.
 You probably don't need any of these. When creating a new language and possibly a new World class, you will inherit serialization code that use these opcodes.
-For test examples, see [t/serialization/](https://github.com/perl6/nqp/tree/master/t/serialization)
+For test examples, see [t/serialization/](https://github.com/Raku/nqp/tree/master/t/serialization)
 ## createsc
 * `createsc($handle-string)`
 creates a serialization context and returns it.
@@ -3079,7 +3323,7 @@ Get the descriptor set by `scsetdec`
 Get the handle string used by `createsc` to create the SC `$sc`
 
 ## pushcompsc
-* `pushcompc($sc)`
+* `pushcompsc($sc)`
 
 ## popcompsc
 * `popcompsc($sc)`
@@ -3093,7 +3337,7 @@ Get the handle string used by `createsc` to create the SC `$sc`
 ## getobjsc
 * `getobjsc($obj)`
 
-## scgetojidx
+## scgetobjidx
 * `scgetobjidx()`
 
 ## serialize
@@ -3102,7 +3346,41 @@ Get the handle string used by `createsc` to create the SC `$sc`
 ## deserialize
 * `deserialize()`
 
-## scojcount
+## scobjcount
 * `scobjcount()`
 
-## 
+## freshcoderef
+* `freshcoderef($code-object)`
+Creates a clone of the given code object and a clone of its static frame and
+connects the two. Returns the clone of the code object. Used for creating a
+fresh copy of a statically compiled piece of code so each of some high level
+code object can gets its own low level executable.
+
+## markcodestatic
+* `markcodestatic($code-object)`
+Marks the code as "static" meaning it's not a closure and thus no closure will
+be serialized.
+
+## scsetcode
+* `scsetcode($sc, $index, $code-object)`
+Adds $code-object to the serialization context at block index $index
+
+## forceouterctx
+* `forceouterctx($code-object, $context)`
+Sets the code object's outer to the context's frame and also the code object's
+static frame's outer to the context's static frame.
+Used to embed a separately compiled code object in a given context, e.g. to
+give an EVALed code a surrounding lexical scope.
+
+## neverrepossess
+* `neverrepossess($obj)`
+Prevents the object from ever getting repossessed. Repossession means that an
+object from a different serialization context, i.e. something we got from
+loading a module, gets added to our own serialization context as well. This is
+done to keep modifications to the object. Of course if different versions of
+the same object are loaded from different serialization contexts, there's a
+conflict that requires resolution -> resolve_reposession_conflicts. In the
+common case of the object being a Stash, we can just merge the different
+versions unless the keys overlap. For some objects we do not want repossession
+even if they were modified, i.e. they were only needed for compilation and/or
+there wouldn't be a way to resolve conflicts.
