@@ -379,18 +379,24 @@ class HLL::Compiler does HLL::Backend::Default {
         }
         if %adverbs<compile> {
             my $command;
+            $command := "echo " ~ %adverbs<output> ~ " > manifest.txt";
+            self.syscall($command);
             if (%adverbs<bm>) {
-                $command := "./nqp/src/linker/elfmaker " ~ %adverbs<output> ~ " " ~ %adverbs<bm>;
-                note($command);
-            }
-            else {
-                $command := "./nqp/src/linker/elfmaker " ~ %adverbs<output>;
-                note($command);
+                $command := "echo " ~ %adverbs<bm> ~ " >> manifest.txt";
+                self.syscall($command);
             }
             self.syscall($command);
-            $command := "gcc -O3 -o " ~ %adverbs<compile> ~ " ./nqp/src/linker/attempt2.c " ~ %adverbs<output>;
+            $command := "tar -cf archive.tar -T manifest.txt --transform='s!^.*/!!'";
+            self.syscall($command);
+            $command := "objcopy --input-target binary --output-target elf64-x86-64 --binary-architecture i386:x86-64 "
+                      ~ "--rename-section .data=rodata,CONTENTS,ALLOC,LOAD,READONLY,DATA archive.tar "
+                      ~ %adverbs<compile> ~ ".o";
+            self.syscall($command);
+            $command := "gcc -O3 -o " ~ %adverbs<compile> ~ " ./nqp/src/linker/attempt2.c " ~ %adverbs<compile> ~ ".o";
             self.syscall($command);
             $command := "chmod 755 " ~ %adverbs<compile>;
+            self.syscall($command);
+            $command := "rm archive.tar manifest.txt";
             self.syscall($command);
         }
         $result;
@@ -401,9 +407,7 @@ class HLL::Compiler does HLL::Backend::Default {
         my $is-windows := nqp::backendconfig()<osname> eq 'MSWin32';
         my class Queue is repr('ConcBlockingQueue') { }
         my $queue := nqp::create(Queue);
-        my class VMDecoder is repr('Decoder') {}
-        my $dec := nqp::create(VMDecoder);
-        nqp::decoderconfigure($dec, 'utf8', nqp::hash());
+
         my sub create_buf($type) {
             my $buf := nqp::newtype(nqp::null(), 'VMArray');
             nqp::composetype($buf, nqp::hash('array', nqp::hash('type', $type)));
@@ -418,8 +422,8 @@ class HLL::Compiler does HLL::Backend::Default {
         my $called_ready := 0;
 
         # task-specific vars
-        my @stdout_bytes;
-        my @stderr_bytes;
+        my @stdout-bytes;
+        my @stderr-bytes;
         my $config := nqp::hash(
             'done', -> $status {
                 $done := $done + 1;
@@ -429,7 +433,7 @@ class HLL::Compiler does HLL::Backend::Default {
             },
             'stdout_bytes', -> $seq, $data, $err {
                 if nqp::isconcrete($data) {
-                    @stdout_bytes[$seq] := $data;
+                    @stdout-bytes[$seq] := $data;
                 }
                 else {
                     ++$read-all1;
@@ -437,7 +441,7 @@ class HLL::Compiler does HLL::Backend::Default {
             },
             'stderr_bytes', -> $seq, $data, $err {
                 if nqp::isconcrete($data) {
-                    @stderr_bytes[$seq] := $data;
+                    @stderr-bytes[$seq] := $data;
                 }
                 else {
                     ++$read-all2;
@@ -465,6 +469,26 @@ class HLL::Compiler does HLL::Backend::Default {
                 }
             }
         }
+
+        # extract task results
+        my str $stdout-str := '';
+        my str $stderr-str := '';
+
+        my class VMDecoder is repr('Decoder') {}
+        my $dec := nqp::create(VMDecoder);
+        nqp::decoderconfigure($dec, 'utf8', nqp::hash());
+
+        for @stdout-bytes -> $bytes {
+            nqp::decoderaddbytes($dec, $bytes);
+        }
+        $stdout-str := nqp::decodertakeallchars($dec);
+        note($stdout-str);
+
+        for @stderr-bytes -> $bytes {
+            nqp::decoderaddbytes($dec, $bytes);
+        }
+        $stderr-str := nqp::decodertakeallchars($dec);
+        note($stderr-str);
     }
 
     method process_args(@args) {

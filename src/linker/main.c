@@ -43,8 +43,7 @@ int main(int argc, char* argv[]) {
     char* command = calloc(100, sizeof(char));
     sprintf(command, "echo %s > manifest.txt", argv[i]);
     system(command);
-    while (i < argc) {
-        i++;
+    while (++i < argc) {
         sprintf(command, "echo %s >> manifest.txt", argv[i]);
         system(command);
     }
@@ -53,8 +52,7 @@ int main(int argc, char* argv[]) {
     free(command);
 
     FILE* tarball = fopen("archive.tar", "rb");
-    if (NULL == tarball)
-    {
+    if (NULL == tarball) {
         printf("Error opening file\n");
         exit(0);
     }
@@ -67,8 +65,8 @@ int main(int argc, char* argv[]) {
     }
     rodata_size = fread(rodata_sgmt, 1, rodata_size, tarball);
     fclose(tarball);
-    remove("archive.tar");
-    remove("manifest.txt");
+    //remove("archive.tar");
+    //remove("manifest.txt");
 
     Elf64_Shdr rodata_hdr;
     rodata_hdr.sh_name = 1;		/* Section name (string tbl index) */
@@ -127,6 +125,15 @@ int main(int argc, char* argv[]) {
     shstrtab_hdr.sh_info = 0;		/* Additional section information */
     shstrtab_hdr.sh_addralign  = 1;		/* Section alignment */
     shstrtab_hdr.sh_entsize = 0;		/* Entry size if section holds table */
+
+    // Output object file with *.o extension (should always be *.bc)
+    for(int i=strlen(argv[1]); i>0; i--) {
+        if(argv[1][i] == '.') {
+            argv[1][i+1]='o';
+            argv[1][i+2]='\0';
+            break;
+        }
+    }
 
     FILE* elf_file = fopen(argv[1], "w+");
     if (NULL == elf_file) {
